@@ -285,6 +285,78 @@ canvas.addEventListener('dblclick', (e) => {
   saveMarkerPosition();
 });
 
+// --- Mobile tap support (iPhone / tablets) ---
+
+let pointerDown = null;
+let pointerMoved = false;
+
+canvas.addEventListener('pointerdown', (e) => {
+  pointerDown = {
+    x: e.clientX,
+    y: e.clientY,
+    t: Date.now(),
+    pointerType: e.pointerType
+  };
+  pointerMoved = false;
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!pointerDown) return;
+
+  const dx = e.clientX - pointerDown.x;
+  const dy = e.clientY - pointerDown.y;
+
+  if (Math.hypot(dx, dy) > 10) {
+    pointerMoved = true;
+  }
+});
+
+canvas.addEventListener('pointerup', (e) => {
+  if (!pointerDown || !modelRoot) {
+    pointerDown = null;
+    return;
+  }
+
+  const dx = e.clientX - pointerDown.x;
+  const dy = e.clientY - pointerDown.y;
+  const dist = Math.hypot(dx, dy);
+  const dt = Date.now() - pointerDown.t;
+
+  const isTouch = pointerDown.pointerType === 'touch';
+
+  if (isTouch && !pointerMoved && dist < 10 && dt < 350) {
+    const hit = pickModelPoint(e);
+    if (!hit) return;
+
+    tempBadge.position.copy(hit.point);
+    tempBadge.position.y += 0.05;
+    saveMarkerPosition();
+  }
+
+  pointerDown = null;
+});
+
+let touchTimer = null;
+
+canvas.addEventListener('touchstart', (e) => {
+  touchTimer = setTimeout(() => {
+    if (!modelRoot) return;
+
+    const touch = e.touches[0];
+    const hit = pickModelPoint(touch);
+    if (!hit) return;
+
+    tempBadge.position.copy(hit.point);
+    tempBadge.position.y += 0.05;
+
+    saveMarkerPosition();
+  }, 500); // hold for 0.5 seconds
+});
+
+canvas.addEventListener('touchend', () => {
+  clearTimeout(touchTimer);
+});
+
 function resize() {
   const w = window.innerWidth;
   const h = window.innerHeight;
