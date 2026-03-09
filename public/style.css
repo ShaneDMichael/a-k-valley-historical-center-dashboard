@@ -71,7 +71,13 @@ min-height: 0; /* IMPORTANT for scrolling inside flex containers */
 }
 
 #marker-help {
-    display: none;
+  display: none;
+  margin-top: 8px;
+  font-size: 10px;
+  opacity: 0.65;
+  line-height: 1.3;
+  text-align: center;
+  flex: 0 0 auto;
 }
 
 #roomPicker a {
@@ -123,7 +129,7 @@ min-height: 0; /* IMPORTANT for scrolling inside flex containers */
   text-align: center;
 }
 
-#help {
+/*#help {
   margin-top: 8px;
   font-size: 10px;
   opacity: 0.65;
@@ -131,6 +137,7 @@ min-height: 0; /* IMPORTANT for scrolling inside flex containers */
   flex: 0 0 auto;
   text-align: center;
 }
+*/
 
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
