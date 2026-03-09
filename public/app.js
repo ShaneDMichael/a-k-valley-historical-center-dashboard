@@ -120,16 +120,16 @@ async function updateOnce() {
       const data = await res.json();
 
       if (!res.ok) {
-        liveEl.textContent = typeof data?.error === 'string' ? data.error : 'error';
+        liveEl.textContent = data && typeof data.error === 'string' ? data.error : 'error';
       } else {
-        const tC = data?.temperature;
-        const h = data?.humidity;
+        const tC = data && data.temperature;
+        const h = data && data.humidity;
         const tF = typeof tC === 'number' ? cToF(tC) : null;
         const tempStr = typeof tF === 'number' ? `${tF.toFixed(1)}°F` : '—';
         const humStr = typeof h === 'number' ? `${h.toFixed(0)}%` : '—';
         liveEl.textContent = `${tempStr}  •  ${humStr}`;
       }
-    } catch {
+    } catch (e) {
       liveEl.textContent = 'offline';
     }
 
@@ -157,12 +157,12 @@ function initSensorOnly() {
       const data = await res.json();
 
       if (!res.ok) {
-        statusEl.textContent = `API error: ${typeof data?.error === 'string' ? data.error : JSON.stringify(data?.error)}`;
+        statusEl.textContent = `API error: ${data && typeof data.error === 'string' ? data.error : JSON.stringify(data && data.error)}`;
         return;
       }
 
-      const tC = data?.temperature;
-      const h = data?.humidity;
+      const tC = data && data.temperature;
+      const h = data && data.humidity;
 
       const tF = typeof tC === 'number' ? cToF(tC) : null;
       const tempStr = typeof tF === 'number' ? `${tF.toFixed(1)}°F` : `${tC ?? '—'}°F`;
@@ -170,7 +170,7 @@ function initSensorOnly() {
 
       statusEl.textContent = `Temperature: ${tempStr}   Humidity: ${humStr}   Updated: ${new Date(data.fetchedAt).toLocaleTimeString()}`;
     } catch (e) {
-      statusEl.textContent = `Network error: ${e?.message || e}`;
+      statusEl.textContent = `Network error: ${(e && e.message) || e}`;
     }
   }
 
@@ -243,13 +243,13 @@ async function pollTemperature() {
     const data = await res.json();
 
     if (!res.ok) {
-      statusEl.textContent = `API error: ${typeof data?.error === 'string' ? data.error : JSON.stringify(data?.error)}`;
+      statusEl.textContent = `API error: ${data && typeof data.error === 'string' ? data.error : JSON.stringify(data && data.error)}`;
       setTempText(tempBadge, '—');
       return;
     }
 
-    const tC = data?.temperature;
-    const h = data?.humidity;
+    const tC = data && data.temperature;
+    const h = data && data.humidity;
 
     const tF = typeof tC === 'number' ? cToF(tC) : null;
     const tempStr = typeof tF === 'number' ? `${tF.toFixed(1)}°F` : `${tC ?? '—'}°F`;
@@ -260,7 +260,7 @@ async function pollTemperature() {
     setTempText(tempBadge, tempStr);
     colorizeBadge(tempBadge, tF);
   } catch (e) {
-    statusEl.textContent = `Network error: ${e?.message || e}`;
+    statusEl.textContent = `Network error: ${(e && e.message) || e}`;
     setTempText(tempBadge, '—');
   }
 }
@@ -364,78 +364,6 @@ canvas.addEventListener('pointerup', (e) => {
 
 canvas.addEventListener('dblclick', (e) => {
   moveMarkerToSurface(e);
-});
-
-// --- Mobile tap support (iPhone / tablets) ---
-
-let pointerDown = null;
-let pointerMoved = false;
-
-canvas.addEventListener('pointerdown', (e) => {
-  pointerDown = {
-    x: e.clientX,
-    y: e.clientY,
-    t: Date.now(),
-    pointerType: e.pointerType
-  };
-  pointerMoved = false;
-});
-
-canvas.addEventListener('pointermove', (e) => {
-  if (!pointerDown) return;
-
-  const dx = e.clientX - pointerDown.x;
-  const dy = e.clientY - pointerDown.y;
-
-  if (Math.hypot(dx, dy) > 10) {
-    pointerMoved = true;
-  }
-});
-
-canvas.addEventListener('pointerup', (e) => {
-  if (!pointerDown || !modelRoot) {
-    pointerDown = null;
-    return;
-  }
-
-  const dx = e.clientX - pointerDown.x;
-  const dy = e.clientY - pointerDown.y;
-  const dist = Math.hypot(dx, dy);
-  const dt = Date.now() - pointerDown.t;
-
-  const isTouch = pointerDown.pointerType === 'touch';
-
-  if (isTouch && !pointerMoved && dist < 10 && dt < 350) {
-    const hit = pickModelPoint(e);
-    if (!hit) return;
-
-    tempBadge.position.copy(hit.point);
-    tempBadge.position.y += 0.05;
-    saveMarkerPosition();
-  }
-
-  pointerDown = null;
-});
-
-let touchTimer = null;
-
-canvas.addEventListener('touchstart', (e) => {
-  touchTimer = setTimeout(() => {
-    if (!modelRoot) return;
-
-    const touch = e.touches[0];
-    const hit = pickModelPoint(touch);
-    if (!hit) return;
-
-    tempBadge.position.copy(hit.point);
-    tempBadge.position.y += 0.05;
-
-    saveMarkerPosition();
-  }, 500); // hold for 0.5 seconds
-});
-
-canvas.addEventListener('touchend', () => {
-  clearTimeout(touchTimer);
 });
 
 function resize() {
@@ -571,7 +499,7 @@ function pickModelPoint(event) {
 
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObject(modelRoot, true);
-  return hits?.[0] || null;
+  return (hits && hits[0]) || null;
 }
 
 function saveMarkerPosition() {
@@ -579,7 +507,7 @@ function saveMarkerPosition() {
   const payload = { x: p.x, y: p.y, z: p.z };
   try {
     localStorage.setItem(MARKER_STORAGE_KEY, JSON.stringify(payload));
-  } catch {
+  } catch (e) {
     // ignore
   }
 }
@@ -589,9 +517,9 @@ function restoreMarkerPosition() {
     const raw = localStorage.getItem(MARKER_STORAGE_KEY);
     if (!raw) return;
     const p = JSON.parse(raw);
-    if (typeof p?.x !== 'number' || typeof p?.y !== 'number' || typeof p?.z !== 'number') return;
+    if (!p || typeof p.x !== 'number' || typeof p.y !== 'number' || typeof p.z !== 'number') return;
     tempBadge.position.set(p.x, p.y, p.z);
-  } catch {
+  } catch (e) {
     // ignore
   }
 }
@@ -605,5 +533,6 @@ function hexToRgb(hex) {
 function rgbToHex(r, g, b) {
   return `#${[r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('')}`;
 }
+
 
 }
