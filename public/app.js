@@ -321,7 +321,7 @@ canvas.addEventListener('pointerdown', (e) => {
 
   if (markerHitTest(e)) {
     draggingMarker = true;
-    if (controls) controls.enabled = false;
+    if (typeof controls !== 'undefined' && controls) controls.enabled = false;
   }
 });
 
@@ -343,7 +343,7 @@ canvas.addEventListener('pointerup', (e) => {
 
   if (draggingMarker) {
     draggingMarker = false;
-    if (controls) controls.enabled = true;
+    if (typeof controls !== 'undefined' && controls) controls.enabled = true;
     pointerDown = null;
     return;
   }
