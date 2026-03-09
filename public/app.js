@@ -6,16 +6,16 @@ const qs = new URLSearchParams(window.location.search);
 const MODEL_FILE = qs.get('model') || '';
 const MODEL_URL = `/${MODEL_FILE}`;
 const POLL_MS = 30000;
-const VIEWER_TOKEN = qs.get('token');
+
+const VIEWER_TOKEN = 'akv_viewer_1';
 const DEVICE_ID = qs.get('deviceId');
+
 const MARKER_STORAGE_KEY = `switchbot_temp_marker_v1:${MODEL_FILE}:${DEVICE_ID || 'default'}`;
-const API_TOKEN_QS = VIEWER_TOKEN ? `?token=${encodeURIComponent(VIEWER_TOKEN)}` : '';
-const API_DEVICE_QS = DEVICE_ID ? `${API_TOKEN_QS ? '&' : '?'}deviceId=${encodeURIComponent(DEVICE_ID)}` : '';
-const API_QS = `${API_TOKEN_QS}${API_DEVICE_QS}`;
+const API_DEVICE_QS = DEVICE_ID ? `?deviceId=${encodeURIComponent(DEVICE_ID)}` : '';
+const API_QS = `${API_DEVICE_QS}`;
 
 function apiQsForDeviceId(deviceId) {
-  if (!deviceId) return API_TOKEN_QS;
-  return `${API_TOKEN_QS}${API_TOKEN_QS ? '&' : '?'}deviceId=${encodeURIComponent(deviceId)}`;
+  return deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : '';
 }
 
 function cToF(c) {
@@ -81,7 +81,7 @@ function initRoomPicker() {
     }
     link.searchParams.set('deviceId', room.deviceId);
     link.searchParams.set('title', room.title);
-    if (VIEWER_TOKEN) link.searchParams.set('token', VIEWER_TOKEN);
+    //if (VIEWER_TOKEN) link.searchParams.set('token', VIEWER_TOKEN);
 
     const a = document.createElement('a');
     a.href = link.toString();
@@ -116,7 +116,7 @@ async function updateOnce() {
     if (!deviceId || !liveEl) continue;
 
     try {
-      const res = await fetch(`/api/temperature${apiQsForDeviceId(deviceId)}`, { cache: 'no-store' });
+      const res = await fetch(`/api/temperature${apiQsForDeviceId(deviceId)}`, {cache: 'no-store',headers: {'x-viewer-token': VIEWER_TOKEN}});
       const data = await res.json();
 
       if (!res.ok) {
@@ -153,7 +153,7 @@ function initSensorOnly() {
 
   async function pollTemperatureSensorOnly() {
     try {
-      const res = await fetch(`/api/temperature${API_QS}`, { cache: 'no-store' });
+      const res = await fetch(`/api/temperature${API_QS}`, {cache: 'no-store',headers: {'x-viewer-token': VIEWER_TOKEN}});
       const data = await res.json();
 
       if (!res.ok) {
@@ -239,7 +239,7 @@ loader.load(
 
 async function pollTemperature() {
   try {
-    const res = await fetch(`/api/temperature${API_QS}`, { cache: 'no-store' });
+    const res = await fetch(`/api/temperature${API_QS}`, {cache: 'no-store',headers: {'x-viewer-token': VIEWER_TOKEN}});
     const data = await res.json();
 
     if (!res.ok) {
