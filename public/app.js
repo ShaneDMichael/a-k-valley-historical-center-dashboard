@@ -309,9 +309,9 @@ tempBadge.position.copy(hit.point);
 if (hit.face && hit.face.normal) {
   const normal = hit.face.normal.clone();
   normal.transformDirection(hit.object.matrixWorld);
-  tempBadge.position.addScaledVector(normal, 0.08);
+  tempBadge.position.addScaledVector(normal, 0.12);
 } else {
-  tempBadge.position.y += 0.08;
+  tempBadge.position.y += 0.12;
 }
 
   saveMarkerPosition();
