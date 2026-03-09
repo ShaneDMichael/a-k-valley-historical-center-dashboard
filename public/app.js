@@ -56,12 +56,12 @@ function initRoomPicker() {
   //}
 
   const rooms = [
-    { title: 'Basement', model: 'Basement.glb', deviceId: 'D88FC2863232' },
+    { title: 'Basement', model: 'Basement.glb', deviceId: 'D8BFC2863232' },
     { title: 'Big room far side', model: 'Big_room_far_side.glb', deviceId: 'E87606063370' },
     { title: 'Big room near side', model: 'Big_room_near_side.glb', deviceId: 'E6558206264D' },
     { title: 'Entrance room', model: 'Entrance_room.glb', deviceId: 'D8BFC2867661' },
     { title: 'Upstairs office and storage', model: 'Upstairs_office_and_storage.glb', deviceId: 'E65584861767' },
-    { title: 'Outside Temperature', deviceId: 'D88FC2464478' },
+    //{ title: 'Outside Temperature', deviceId: 'D88FC2464478' },
   ];
 
   if (!pickerEl) return;
