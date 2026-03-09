@@ -272,17 +272,98 @@ function cToF(c) {
 setInterval(pollTemperature, POLL_MS);
 pollTemperature();
 
-canvas.addEventListener('dblclick', (e) => {
-  if (!modelRoot) return;
+// ===============================
+// Marker interaction: place + drag
+// ===============================
+
+let pointerDown = null;
+let pointerMoved = false;
+let draggingMarker = false;
+
+const MARKER_HIT_RADIUS_PX = 28;
+
+function markerHitTest(e) {
+  if (!tempBadge) return false;
+
+  const rect = canvas.getBoundingClientRect();
+
+  const markerScreen = tempBadge.position.clone().project(camera);
+  const sx = ((markerScreen.x + 1) / 2) * rect.width;
+  const sy = ((-markerScreen.y + 1) / 2) * rect.height;
+
+  const dx = e.clientX - sx;
+  const dy = e.clientY - sy;
+
+  return Math.hypot(dx, dy) <= MARKER_HIT_RADIUS_PX;
+}
+
+function moveMarkerToSurface(e) {
+  if (!modelRoot) return false;
+
   const hit = pickModelPoint(e);
-  if (!hit) return;
+  if (!hit) return false;
 
   tempBadge.position.copy(hit.point);
-
-  // Lift slightly so it doesn't z-fight with surfaces.
   tempBadge.position.y += 0.05;
 
   saveMarkerPosition();
+  return true;
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  pointerDown = {
+    x: e.clientX,
+    y: e.clientY,
+    t: Date.now(),
+    pointerType: e.pointerType
+  };
+  pointerMoved = false;
+
+  if (markerHitTest(e)) {
+    draggingMarker = true;
+    if (controls) controls.enabled = false;
+  }
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!pointerDown) return;
+
+  const dx = e.clientX - pointerDown.x;
+  const dy = e.clientY - pointerDown.y;
+
+  if (Math.hypot(dx, dy) > 8) pointerMoved = true;
+
+  if (draggingMarker) {
+    moveMarkerToSurface(e);
+  }
+});
+
+canvas.addEventListener('pointerup', (e) => {
+  if (!pointerDown) return;
+
+  if (draggingMarker) {
+    draggingMarker = false;
+    if (controls) controls.enabled = true;
+    pointerDown = null;
+    return;
+  }
+
+  const dx = e.clientX - pointerDown.x;
+  const dy = e.clientY - pointerDown.y;
+  const dist = Math.hypot(dx, dy);
+  const dt = Date.now() - pointerDown.t;
+
+  const isTouch = pointerDown.pointerType === 'touch';
+
+  if (isTouch && !pointerMoved && dist < 10 && dt < 350) {
+    moveMarkerToSurface(e);
+  }
+
+  pointerDown = null;
+});
+
+canvas.addEventListener('dblclick', (e) => {
+  moveMarkerToSurface(e);
 });
 
 // --- Mobile tap support (iPhone / tablets) ---
