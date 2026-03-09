@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>A-K Valley Historical Center Room Temperature and Humidity Dashboard</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="hud">
+      <div id="title">A-K Valley Historical Center Temperature and Humidity Dashboard</div>
+      <div id="status">Loading…</div>
+      <div id="roomPicker" hidden></div>
+      <div id="help">
+        Double-click the model to place the temperature marker. Marker position is saved in this browser.
+      </div>
+    </div>
+    <canvas id="c"></canvas>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/vendor/three/build/three.module.js",
+          "three/addons/": "/vendor/three/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+
+  
+</html>

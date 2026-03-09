@@ -1,0 +1,131 @@
+html,
+body {
+  height: auto;
+  margin: 0;
+  min-height: 100%;
+  overflow: hidden; /* keep page from scrolling; we'll scroll the tile list instead */
+  -webkit-overflow-scrolling: touch;
+  background: #0b1020;
+  color: #e8eeff;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+#c {
+  display: block;
+  width: 100vw;
+  height: 100svh;
+}
+
+#hud {
+  position: fixed;
+  max-height: calc(100svh - 24px); /* 12px top + 12px bottom margin */
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  margin: 12px; 
+  max-width: 680px;
+  background: rgba(15, 22, 44, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+  backdrop-filter: blur(10px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+}
+
+#title {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+#status {
+  margin-top: 6px;
+  font-size: 14px;
+  opacity: 0.95;
+}
+
+#roomPicker {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 10px;
+  padding-top: 10px;
+  flex: 1 1 auto;
+min-height: 0; /* IMPORTANT for scrolling inside flex containers */
+}
+
+#roomPicker .pickerTitle {
+  font-weight: 700;
+  font-size: 14px;
+  opacity: 0.85;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+#roomPicker a {
+  display: flex;
+  padding: 18px 14px;
+  border-radius: 14px;
+  text-decoration: none;
+  color: rgba(232, 238, 255, 0.92);
+  background: rgba(10, 14, 28, 0.65);
+
+  border: 1.5px solid rgba(80, 140, 255, 0.55);
+
+  box-shadow:
+    0 0 0 1px rgba(80, 140, 255, 0.15),
+    0 6px 18px rgba(0, 0, 0, 0.45);
+
+  transition: all 0.2s ease;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+#roomPicker a:hover {
+  border-color: rgba(120, 180, 255, 0.85);
+  box-shadow:
+    0 0 12px rgba(80, 140, 255, 0.6),
+    0 10px 24px rgba(0, 0, 0, 0.6);
+  transform: translateY(-2px);
+}
+
+#roomPicker a .name {
+  font-weight: 650;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+#roomPicker a .meta {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+#roomPicker a .live {
+  font-size: 13px;
+  font-weight: 650;
+  margin-top: 8px;
+  color: rgba(232, 238, 255, 0.92);
+  text-align: center;
+}
+
+#help {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.75;
+  line-height: 1.35;
+  flex: 0 0 auto;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+}
