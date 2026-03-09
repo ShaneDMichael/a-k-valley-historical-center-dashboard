@@ -303,8 +303,16 @@ function moveMarkerToSurface(e) {
   const hit = pickModelPoint(e);
   if (!hit) return false;
 
-  tempBadge.position.copy(hit.point);
-  tempBadge.position.y += 0.05;
+tempBadge.position.copy(hit.point);
+
+// Push marker outward from the hit surface
+if (hit.face && hit.face.normal) {
+  const normal = hit.face.normal.clone();
+  normal.transformDirection(hit.object.matrixWorld);
+  tempBadge.position.addScaledVector(normal, 0.08);
+} else {
+  tempBadge.position.y += 0.08;
+}
 
   saveMarkerPosition();
   return true;
