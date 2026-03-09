@@ -4,6 +4,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const qs = new URLSearchParams(window.location.search);
 const MODEL_FILE = qs.get('model') || '';
+if (MODEL_FILE) {
+  const help = document.getElementById('marker-help');
+  if (help) help.style.display = 'block';
+}
 const MODEL_URL = `/${MODEL_FILE}`;
 const POLL_MS = 30000;
 

@@ -68,6 +68,10 @@ min-height: 0; /* IMPORTANT for scrolling inside flex containers */
   margin-bottom: 10px;
 }
 
+#marker-help {
+    display: none;
+}
+
 #roomPicker a {
   display: flex;
   padding: 18px 14px;
