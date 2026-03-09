@@ -25,7 +25,7 @@ function cToF(c) {
 const titleEl = document.getElementById('title');
 if (titleEl) {
   const urlTitle = qs.get('title');
-  const defaultTitle = (MODEL_FILE || 'A-K Valley Historical Center Room Temperature and Humidity Dashboard').replace(/\.glb$/i, '').replace(/_/g, ' ');
+  const defaultTitle = (MODEL_FILE || 'A-K Valley Heritage Museum - Room Temperature and Humidity Dashboard').replace(/\.glb$/i, '').replace(/_/g, ' ');
   titleEl.textContent = urlTitle && urlTitle.trim().length ? urlTitle.trim() : defaultTitle;
 }
 
@@ -182,7 +182,7 @@ function initViewer() {
   if (!titleEl) return;
 
   const urlTitle = qs.get('title');
-  const defaultTitle = (MODEL_FILE || 'A-K Valley Historical Center Room Temperature and Humidity Dashboard').replace(/\.glb$/i, '').replace(/_/g, ' ');
+  const defaultTitle = (MODEL_FILE || 'A-K Valley Heritage Museum - Room Temperature and Humidity Dashboard').replace(/\.glb$/i, '').replace(/_/g, ' ');
   titleEl.textContent = urlTitle && urlTitle.trim().length ? urlTitle.trim() : defaultTitle;
 
   // Existing viewer code continues below
@@ -232,7 +232,7 @@ loader.load(
   },
   undefined,
   (err) => {
-    statusEl.textContent = 'Failed to load 3D model. Export your PolyCam floorplan as GLB and place it at public/model.glb.';
+    statusEl.textContent = 'Failed to load 3D model. Export your floorplan as GLB and place it at public/model.glb.';
     console.error(err);
   }
 );
