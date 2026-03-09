@@ -9,7 +9,7 @@ if (MODEL_FILE) {
   if (help) help.style.display = 'block';
 }
 const MODEL_URL = `/${MODEL_FILE}`;
-const POLL_MS = 30000;
+const POLL_MS = 10000;
 
 const VIEWER_TOKEN = 'akv_viewer_1';
 const DEVICE_ID = qs.get('deviceId');
