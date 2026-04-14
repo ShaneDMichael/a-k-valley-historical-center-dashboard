@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-import pandas as pd
 import requests
 from fastapi import FastAPI, Header, HTTPException
 
@@ -140,7 +139,7 @@ def _get_nws_points(lat: float, lon: float) -> Dict[str, Any]:
     return resp.json()
 
 
-def fetch_noaa_hourly(lat: float, lon: float, hours: int = 48) -> pd.DataFrame:
+def fetch_noaa_hourly(lat: float, lon: float, hours: int = 48) -> List[Dict[str, Any]]:
     points = _get_nws_points(lat, lon)
     forecast_url = points.get("properties", {}).get("forecastHourly")
     if not forecast_url:
@@ -153,7 +152,7 @@ def fetch_noaa_hourly(lat: float, lon: float, hours: int = 48) -> pd.DataFrame:
     if not isinstance(periods, list) or not periods:
         raise RuntimeError("NOAA hourly forecast missing periods")
 
-    rows = []
+    rows: List[Dict[str, Any]] = []
     for p in periods[:hours]:
         start_time = p.get("startTime")
         temp_f = p.get("temperature")
@@ -161,78 +160,87 @@ def fetch_noaa_hourly(lat: float, lon: float, hours: int = 48) -> pd.DataFrame:
         dewpoint_c = dewpoint.get("value")
         if not start_time:
             continue
-        ts = pd.to_datetime(start_time, utc=True)
+        try:
+            ts = datetime.fromisoformat(str(start_time).replace("Z", "+00:00")).astimezone(timezone.utc)
+        except Exception:
+            continue
+
+        out_temp_f = float(temp_f) if isinstance(temp_f, (int, float)) else np.nan
+        out_dp_c = float(dewpoint_c) if isinstance(dewpoint_c, (int, float)) else np.nan
+        out_dp_f = out_dp_c * 9.0 / 5.0 + 32.0 if not np.isnan(out_dp_c) else np.nan
+
         rows.append(
             {
                 "timestamp": ts,
-                "outside_temp_f": float(temp_f) if temp_f is not None else np.nan,
-                "outside_dew_point_c": float(dewpoint_c) if dewpoint_c is not None else np.nan,
+                "outside_temp_f": out_temp_f,
+                "outside_dew_point_f": out_dp_f,
             }
         )
 
-    df = pd.DataFrame(rows)
-    if df.empty:
+    if not rows:
         raise RuntimeError("NOAA hourly forecast produced no rows")
 
-    df["outside_dew_point_f"] = df["outside_dew_point_c"] * 9.0 / 5.0 + 32.0
-    return df[["timestamp", "outside_temp_f", "outside_dew_point_f"]].copy()
+    return rows
 
 
-def _hour_sin_cos(ts: pd.Series) -> pd.DataFrame:
-    hour = ts.dt.hour.astype(float)
-    angle = 2.0 * np.pi * hour / 24.0
-    return pd.DataFrame({"hour_sin": np.sin(angle), "hour_cos": np.cos(angle)})
+def _hour_sin_cos(hours: np.ndarray) -> Dict[str, np.ndarray]:
+    h = hours.astype(float)
+    angle = 2.0 * np.pi * h / 24.0
+    return {"hour_sin": np.sin(angle), "hour_cos": np.cos(angle)}
 
 
 def build_feature_frame(
     now_utc: datetime,
     basement_temp_c: Optional[float],
     basement_rh: Optional[float],
-    noaa_df: pd.DataFrame,
-) -> pd.DataFrame:
+    noaa_rows: List[Dict[str, Any]],
+) -> Dict[str, np.ndarray]:
     # This is a minimal inference-time feature set. Your exported feature schema defines what the
     # model expects; any missing features are filled with NaN.
-    base_ts = pd.to_datetime(noaa_df["timestamp"], utc=True)
-
-    df = pd.DataFrame(
-        {
-            "timestamp": base_ts,
-            "outside_temp_f": noaa_df["outside_temp_f"].astype(float),
-            "outside_dew_point_f": noaa_df["outside_dew_point_f"].astype(float),
-        }
-    )
+    timestamps = [r["timestamp"] for r in noaa_rows]
+    outside_temp_f = np.asarray([r.get("outside_temp_f", np.nan) for r in noaa_rows], dtype=float)
+    outside_dew_point_f = np.asarray([r.get("outside_dew_point_f", np.nan) for r in noaa_rows], dtype=float)
 
     basement_temp_f = np.nan
     if basement_temp_c is not None:
         basement_temp_f = float(basement_temp_c) * 9.0 / 5.0 + 32.0
 
-    df["basement_temp_f"] = basement_temp_f
-    df["basement_rh_lag_1h"] = float(basement_rh) if basement_rh is not None else np.nan
-    df["basement_rh_lag_6h"] = np.nan
-    df["basement_rh_lag_24h"] = np.nan
+    basement_temp_f_arr = np.full(len(timestamps), basement_temp_f, dtype=float)
+    basement_rh_lag_1h = np.full(len(timestamps), float(basement_rh) if basement_rh is not None else np.nan, dtype=float)
+    basement_rh_lag_6h = np.full(len(timestamps), np.nan, dtype=float)
+    basement_rh_lag_24h = np.full(len(timestamps), np.nan, dtype=float)
 
-    cyc = _hour_sin_cos(df["timestamp"])
-    df = pd.concat([df, cyc], axis=1)
+    hours = np.asarray([t.hour for t in timestamps], dtype=float)
+    cyc = _hour_sin_cos(hours)
 
-    df["outside_dewpoint_minus_basement_temp_f"] = df["outside_dew_point_f"] - df["basement_temp_f"]
+    dewpoint_minus_basement_temp = outside_dew_point_f - basement_temp_f_arr
 
-    df = df.set_index("timestamp")
-    return df
+    return {
+        "timestamps": np.asarray(timestamps, dtype=object),
+        "outside_temp_f": outside_temp_f,
+        "outside_dew_point_f": outside_dew_point_f,
+        "basement_temp_f": basement_temp_f_arr,
+        "basement_rh_lag_1h": basement_rh_lag_1h,
+        "basement_rh_lag_6h": basement_rh_lag_6h,
+        "basement_rh_lag_24h": basement_rh_lag_24h,
+        "hour_sin": cyc["hour_sin"],
+        "hour_cos": cyc["hour_cos"],
+        "outside_dewpoint_minus_basement_temp_f": dewpoint_minus_basement_temp,
+    }
 
 
-def predict_48h(features_df: pd.DataFrame) -> np.ndarray:
+def predict_48h(feature_arrays: Dict[str, np.ndarray]) -> np.ndarray:
     _load_artifacts()
     assert _feature_cols is not None
     assert _coef is not None and _intercept is not None
 
-    X = features_df.copy()
-    for col in _feature_cols:
-        if col not in X.columns:
-            X[col] = np.nan
-
-    X = X[_feature_cols]
-
-    Xv = X.to_numpy(dtype=float)
+    n = len(feature_arrays.get("outside_temp_f", []))
+    Xv = np.full((n, len(_feature_cols)), np.nan, dtype=float)
+    for j, col in enumerate(_feature_cols):
+        arr = feature_arrays.get(col)
+        if arr is None:
+            continue
+        Xv[:, j] = np.asarray(arr, dtype=float)
     if Xv.shape[1] != _coef.shape[0]:
         raise RuntimeError(
             f"Feature mismatch: X has {Xv.shape[1]} cols but model has {_coef.shape[0]} coefs"
@@ -305,24 +313,22 @@ def refresh(x_forecast_api_key: Optional[str] = Header(default=None)) -> Dict[st
             now_utc=now,
             basement_temp_c=basement.get("temperature_c"),
             basement_rh=basement.get("humidity_percent"),
-            noaa_df=noaa,
+            noaa_rows=noaa,
         )
 
         preds = predict_48h(feat)
         preds_rounded = np.round(preds.astype(float), 1)
 
         rows = []
-        for ts, out_temp, out_dp, prh in zip(
-            noaa["timestamp"].tolist(),
-            noaa["outside_temp_f"].astype(float).tolist(),
-            noaa["outside_dew_point_f"].astype(float).tolist(),
-            preds_rounded.tolist(),
-        ):
+        for row, prh in zip(noaa, preds_rounded.tolist()):
+            ts = row.get("timestamp")
+            out_temp = row.get("outside_temp_f")
+            out_dp = row.get("outside_dew_point_f")
             rows.append(
                 {
-                    "timestamp": pd.to_datetime(ts, utc=True).isoformat(),
-                    "outside_temp_f": round(float(out_temp), 1) if pd.notna(out_temp) else None,
-                    "outside_dew_point_f": round(float(out_dp), 1) if pd.notna(out_dp) else None,
+                    "timestamp": (ts.astimezone(timezone.utc).isoformat() if isinstance(ts, datetime) else None),
+                    "outside_temp_f": round(float(out_temp), 1) if isinstance(out_temp, (int, float)) and not np.isnan(float(out_temp)) else None,
+                    "outside_dew_point_f": round(float(out_dp), 1) if isinstance(out_dp, (int, float)) and not np.isnan(float(out_dp)) else None,
                     "predicted_basement_rh_percent": float(prh),
                     "mold_risk_flag": bool(float(prh) >= MOLD_RH_THRESHOLD),
                 }
