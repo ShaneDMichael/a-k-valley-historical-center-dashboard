@@ -1,0 +1,13 @@
+{
+  "feature_cols": [
+    "outside_temp_f",
+    "outside_dew_point_f",
+    "basement_temp_f",
+    "basement_rh_lag_1h",
+    "basement_rh_lag_6h",
+    "basement_rh_lag_24h",
+    "hour_sin",
+    "hour_cos",
+    "outside_dewpoint_minus_basement_temp_f"
+  ]
+}

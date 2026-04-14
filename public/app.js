@@ -36,6 +36,10 @@ if (titleEl) {
 const statusEl = document.getElementById('status');
 const canvas = document.getElementById('c');
 
+const basementForecastWrap = document.getElementById('basementForecast');
+const basementForecastBtn = document.getElementById('basementForecastBtn');
+const basementForecastPanel = document.getElementById('basementForecastPanel');
+
 if (DEVICE_ID && !MODEL_FILE) {
   initSensorOnly();
 } else if (!MODEL_FILE || !DEVICE_ID) {
@@ -48,6 +52,10 @@ function initRoomPicker() {
   const pickerEl = document.getElementById('roomPicker');
   if (pickerEl) {
     pickerEl.hidden = false;
+  }
+
+  if (basementForecastWrap) {
+    basementForecastWrap.hidden = false;
   }
 
   if (statusEl) {
@@ -107,6 +115,95 @@ function initRoomPicker() {
   }
 
   startRoomPickerLiveTemps(pickerEl);
+}
+
+function fmtLocalHour(isoTs) {
+  try {
+    const d = new Date(isoTs);
+    if (Number.isNaN(d.getTime())) return String(isoTs);
+    return d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return String(isoTs);
+  }
+}
+
+async function fetchBasementForecastLatest() {
+  const res = await fetch('/api/basement/latest', {
+    cache: 'no-store',
+    headers: { 'x-viewer-token': VIEWER_TOKEN },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const msg = data && typeof data.error === 'string' ? data.error : (data && data.detail) || 'error';
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+  return data;
+}
+
+function renderBasementForecast(report) {
+  if (!basementForecastPanel) return;
+
+  const cur = report && report.basement_current;
+  const risk = report && report.risk;
+  const forecast = Array.isArray(report && report.forecast) ? report.forecast : [];
+
+  const curRh = cur && typeof cur.humidity_percent === 'number' ? `${cur.humidity_percent.toFixed(1)}%` : '—';
+  const generatedAt = report && report.generated_at ? fmtLocalHour(report.generated_at) : '—';
+  const riskLabel = risk && typeof risk.label === 'string' ? risk.label : '—';
+  const hrsAbove = risk && typeof risk.hours_above_threshold_next_48h === 'number' ? risk.hours_above_threshold_next_48h : null;
+  const threshold = risk && typeof risk.threshold === 'number' ? risk.threshold : null;
+  const riskLine = hrsAbove === null || threshold === null ? `Mold risk: ${riskLabel}` : `Mold risk: ${riskLabel} (${hrsAbove} of next 48h >= ${threshold.toFixed(0)}%)`;
+
+  const headRows = forecast.slice(0, 12);
+  const table = headRows.length
+    ? `
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Pred RH</th>
+            <th>Out T</th>
+            <th>Out DP</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${headRows
+            .map((r) => {
+              const t = fmtLocalHour(r.timestamp);
+              const prh = typeof r.predicted_basement_rh_percent === 'number' ? `${r.predicted_basement_rh_percent.toFixed(1)}%` : '—';
+              const ot = typeof r.outside_temp_f === 'number' ? `${r.outside_temp_f.toFixed(1)}°F` : '—';
+              const odp = typeof r.outside_dew_point_f === 'number' ? `${r.outside_dew_point_f.toFixed(1)}°F` : '—';
+              return `<tr><td>${t}</td><td>${prh}</td><td>${ot}</td><td>${odp}</td></tr>`;
+            })
+            .join('')}
+        </tbody>
+      </table>
+    `
+    : '';
+
+  basementForecastPanel.innerHTML = `
+    <div><strong>Basement RH (current):</strong> ${curRh}</div>
+    <div><strong>${riskLine}</strong></div>
+    <div><strong>Generated:</strong> ${generatedAt}</div>
+    ${table}
+  `;
+}
+
+async function onBasementForecastClick() {
+  if (!basementForecastBtn || !basementForecastPanel) return;
+  basementForecastPanel.hidden = false;
+  basementForecastPanel.textContent = 'Loading latest forecast…';
+
+  try {
+    const latest = await fetchBasementForecastLatest();
+    renderBasementForecast(latest);
+  } catch (e) {
+    basementForecastPanel.textContent = `Error: ${(e && e.message) || e}`;
+  }
+}
+
+if (basementForecastBtn) {
+  basementForecastBtn.addEventListener('click', onBasementForecastClick);
 }
 
 function startRoomPickerLiveTemps(pickerEl) {

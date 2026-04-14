@@ -129,6 +129,51 @@ min-height: 0; /* IMPORTANT for scrolling inside flex containers */
   text-align: center;
 }
 
+#basementForecast {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+#basementForecastBtn {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(80, 140, 255, 0.55);
+  background: rgba(10, 14, 28, 0.65);
+  color: rgba(232, 238, 255, 0.92);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#basementForecastBtn:hover {
+  border-color: rgba(120, 180, 255, 0.85);
+}
+
+#basementForecastPanel {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 14, 28, 0.55);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+#basementForecastPanel table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+#basementForecastPanel th,
+#basementForecastPanel td {
+  text-align: left;
+  padding: 6px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 /*#help {
   margin-top: 8px;
   font-size: 10px;

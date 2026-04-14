@@ -119,6 +119,45 @@ app.get('/api/temperature', async (req, res) => {
   }
 });
 
+function getForecastServiceConfig() {
+  const baseUrl = typeof process.env.FORECAST_SERVICE_URL === 'string' ? process.env.FORECAST_SERVICE_URL.trim() : null;
+  const apiKey = typeof process.env.FORECAST_API_KEY === 'string' ? process.env.FORECAST_API_KEY.trim() : null;
+
+  if (!baseUrl) {
+    const err = new Error('Missing env var: FORECAST_SERVICE_URL');
+    err.statusCode = 500;
+    throw err;
+  }
+
+  return { baseUrl: baseUrl.replace(/\/$/, ''), apiKey };
+}
+
+app.get('/api/basement/latest', async (req, res) => {
+  try {
+    const { baseUrl, apiKey } = getForecastServiceConfig();
+    const headers = apiKey ? { 'x-forecast-api-key': apiKey } : undefined;
+    const response = await axios.get(`${baseUrl}/latest`, { headers, timeout: 15_000 });
+    return res.json(response.data);
+  } catch (e) {
+    const status = e?.statusCode || e?.response?.status || 500;
+    const message = e?.response?.data || e?.message || 'Unknown error';
+    return res.status(status).json({ error: message });
+  }
+});
+
+app.post('/api/basement/refresh', async (req, res) => {
+  try {
+    const { baseUrl, apiKey } = getForecastServiceConfig();
+    const headers = apiKey ? { 'x-forecast-api-key': apiKey } : undefined;
+    const response = await axios.post(`${baseUrl}/refresh`, null, { headers, timeout: 30_000 });
+    return res.json(response.data);
+  } catch (e) {
+    const status = e?.statusCode || e?.response?.status || 500;
+    const message = e?.response?.data || e?.message || 'Unknown error';
+    return res.status(status).json({ error: message });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
