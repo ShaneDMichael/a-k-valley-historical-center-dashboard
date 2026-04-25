@@ -69,7 +69,7 @@ function initRoomPicker() {
 
   const rooms = [
     { title: 'Basement far side', model: 'Basement.glb', deviceId: 'D8BFC2863232' },
-    //{ title: 'Basement near side', model: 'Basement.glb', deviceID: 'D8BFC2464478' },
+    { title: 'Basement near side', model: 'Basement.glb', deviceID: 'D8BFC2464478' },
     { title: 'Big room far side', model: 'Big_room_far_side.glb', deviceId: 'E87606063370' },
     { title: 'Big room near side', model: 'Big_room_near_side.glb', deviceId: 'E6558206264D' },
     { title: 'Entrance room', model: 'Entrance_room.glb', deviceId: 'D8BFC2867661' },
