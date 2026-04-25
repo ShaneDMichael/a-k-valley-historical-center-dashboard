@@ -123,6 +123,18 @@ def _ensure_tables() -> None:
                 );
                 """
             )
+            cur.execute(
+                """
+                create table if not exists weather_forecasts (
+                  ts timestamptz not null,
+                  source text not null,
+                  temp_f double precision,
+                  rh_percent double precision,
+                  dew_point_f double precision,
+                  primary key (ts, source)
+                );
+                """
+            )
         conn.commit()
 
 
