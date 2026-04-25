@@ -184,8 +184,12 @@ def _build_feature_row(now_utc: datetime) -> Tuple[pd.DataFrame, Dict[str, Any]]
     for role in raw["role"].unique():
         part = raw.loc[raw["role"] == role, ["ts", "temp_f", "rh_percent", "dew_point_f"]].copy()
         part = part.set_index("ts").sort_index()
+        # Ensure numeric dtypes so resampling doesn't drop all-null columns.
+        for c in ("temp_f", "rh_percent", "dew_point_f"):
+            part[c] = pd.to_numeric(part[c], errors="coerce")
         # Mean in case of duplicates; then resample and forward-fill.
         part = part.resample("1min").mean(numeric_only=True).ffill()
+        part = part.reindex(columns=["temp_f", "rh_percent", "dew_point_f"])
         wide_parts[role] = part
 
     far = wide_parts.get("basement_far")
