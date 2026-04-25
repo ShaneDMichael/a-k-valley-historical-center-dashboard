@@ -136,7 +136,7 @@ app.get('/api/basement/latest', async (req, res) => {
   try {
     const { baseUrl, apiKey } = getForecastServiceConfig();
     const headers = apiKey ? { 'x-forecast-api-key': apiKey } : undefined;
-    const response = await axios.get(`${baseUrl}/latest`, { headers, timeout: 15_000 });
+    const response = await axios.get(`${baseUrl}/status`, { headers, timeout: 15_000 });
     return res.json(response.data);
   } catch (e) {
     const status = e?.statusCode || e?.response?.status || 500;

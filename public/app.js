@@ -144,49 +144,26 @@ async function fetchBasementForecastLatest() {
 function renderBasementForecast(report) {
   if (!basementForecastPanel) return;
 
-  const cur = report && report.basement_current;
-  const risk = report && report.risk;
-  const forecast = Array.isArray(report && report.forecast) ? report.forecast : [];
+  const updatedAt = report && report.updated_at ? fmtLocalHour(report.updated_at) : '—';
 
-  const curRh = cur && typeof cur.humidity_percent === 'number' ? `${cur.humidity_percent.toFixed(1)}%` : '—';
-  const generatedAt = report && report.generated_at ? fmtLocalHour(report.generated_at) : '—';
-  const riskLabel = risk && typeof risk.label === 'string' ? risk.label : '—';
-  const hrsAbove = risk && typeof risk.hours_above_threshold_next_48h === 'number' ? risk.hours_above_threshold_next_48h : null;
-  const threshold = risk && typeof risk.threshold === 'number' ? risk.threshold : null;
-  const riskLine = hrsAbove === null || threshold === null ? `Mold risk: ${riskLabel}` : `Mold risk: ${riskLabel} (${hrsAbove} of next 48h >= ${threshold.toFixed(0)}%)`;
+  const curRh = report && report.current && typeof report.current.rh_max_percent === 'number' ? `${report.current.rh_max_percent.toFixed(1)}%` : '—';
+  const curRisk = report && report.current && typeof report.current.risk_status === 'string' ? report.current.risk_status : '—';
 
-  const headRows = forecast.slice(0, 12);
-  const table = headRows.length
-    ? `
-      <table>
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Pred RH</th>
-            <th>Out T</th>
-            <th>Out DP</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${headRows
-            .map((r) => {
-              const t = fmtLocalHour(r.timestamp);
-              const prh = typeof r.predicted_basement_rh_percent === 'number' ? `${r.predicted_basement_rh_percent.toFixed(1)}%` : '—';
-              const ot = typeof r.outside_temp_f === 'number' ? `${r.outside_temp_f.toFixed(1)}°F` : '—';
-              const odp = typeof r.outside_dew_point_f === 'number' ? `${r.outside_dew_point_f.toFixed(1)}°F` : '—';
-              return `<tr><td>${t}</td><td>${prh}</td><td>${ot}</td><td>${odp}</td></tr>`;
-            })
-            .join('')}
-        </tbody>
-      </table>
-    `
-    : '';
+  const f24Rh = report && report.forecast_24h && typeof report.forecast_24h.rh_max_percent === 'number' ? `${report.forecast_24h.rh_max_percent.toFixed(1)}%` : '—';
+  const f24Risk = report && report.forecast_24h && typeof report.forecast_24h.risk_status === 'string' ? report.forecast_24h.risk_status : '—';
+
+  const f48Rh = report && report.forecast_48h && typeof report.forecast_48h.rh_max_percent === 'number' ? `${report.forecast_48h.rh_max_percent.toFixed(1)}%` : '—';
+  const f48Risk = report && report.forecast_48h && typeof report.forecast_48h.risk_status === 'string' ? report.forecast_48h.risk_status : '—';
+
+  const warnings = report && Array.isArray(report.warnings) ? report.warnings : [];
+  const warningLine = warnings.length ? `<div><strong>Note:</strong> ${String(warnings[0])}</div>` : '';
 
   basementForecastPanel.innerHTML = `
-    <div><strong>Basement RH (current):</strong> ${curRh}</div>
-    <div><strong>${riskLine}</strong></div>
-    <div><strong>Generated:</strong> ${generatedAt}</div>
-    ${table}
+    <div><strong>Basement RH (current):</strong> ${curRh} (${curRisk})</div>
+    <div><strong>Forecast +24h:</strong> ${f24Rh} (${f24Risk})</div>
+    <div><strong>Forecast +48h:</strong> ${f48Rh} (${f48Risk})</div>
+    <div><strong>Updated:</strong> ${updatedAt}</div>
+    ${warningLine}
   `;
 }
 
