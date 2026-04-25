@@ -199,6 +199,22 @@ def _build_feature_row(now_utc: datetime) -> Tuple[pd.DataFrame, Dict[str, Any]]
         debug["missing_roles"] = [r for r in ["basement_far", "outside"] if r not in wide_parts]
         return pd.DataFrame(), debug
 
+    # Guard: avoid making predictions until we have enough history to populate lag features.
+    # We use 1-3 hour lags (plus minute lags), so require at least ~3 hours of 1-minute coverage.
+    required_minutes = 3 * 60
+    required_start = now_utc - pd.Timedelta(minutes=required_minutes)
+    far_coverage_ok = far.index.min() <= required_start and far.index.max() >= now_utc
+    out_coverage_ok = out.index.min() <= required_start and out.index.max() >= now_utc
+    far_points_ok = int(far.loc[required_start:now_utc].shape[0]) >= required_minutes
+    out_points_ok = int(out.loc[required_start:now_utc].shape[0]) >= required_minutes
+    if not (far_coverage_ok and out_coverage_ok and far_points_ok and out_points_ok):
+        debug["insufficient_history"] = {
+            "required_minutes": int(required_minutes),
+            "far_points": int(far.loc[required_start:now_utc].shape[0]) if not far.empty else 0,
+            "out_points": int(out.loc[required_start:now_utc].shape[0]) if not out.empty else 0,
+        }
+        return pd.DataFrame(), debug
+
     idx = far.index.union(out.index).sort_values()
     df = pd.DataFrame(index=idx)
     df["basement_temp_mid_f"] = far.reindex(idx)["temp_f"]
