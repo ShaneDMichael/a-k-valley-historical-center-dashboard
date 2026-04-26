@@ -14,7 +14,7 @@ import requests
 from fastapi import FastAPI
 
 
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 
 CACHE_DIR = Path(os.getenv("CACHE_DIR", "/var/data")).resolve()
 
@@ -35,8 +35,8 @@ SWITCHBOT_OUTSIDE_DEVICE_ID = os.getenv("SWITCHBOT_OUTSIDE_DEVICE_ID")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 MODELS_DIR = Path(os.getenv("MODELS_DIR", str(Path(__file__).parent / "models"))).resolve()
-MODEL_24H_PATH = Path(os.getenv("MODEL_24H_PATH", str(MODELS_DIR / "basement_rh_lin_24h.joblib"))).resolve()
-MODEL_48H_PATH = Path(os.getenv("MODEL_48H_PATH", str(MODELS_DIR / "basement_rh_lin_48h.joblib"))).resolve()
+MODEL_24H_PATH = Path(os.getenv("MODEL_24H_PATH", str(MODELS_DIR / "basement_rh_rf_24h.joblib"))).resolve()
+MODEL_48H_PATH = Path(os.getenv("MODEL_48H_PATH", str(MODELS_DIR / "basement_rh_rf_48h.joblib"))).resolve()
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "akv-forecast-service/0.1"})
@@ -367,6 +367,8 @@ def health() -> Dict[str, Any]:
         "version": APP_VERSION,
         "cacheDir": str(CACHE_DIR),
         "modelsDir": str(MODELS_DIR),
+        "model24hPath": str(MODEL_24H_PATH),
+        "model48hPath": str(MODEL_48H_PATH),
         "modelsPresent": models_present,
         "dbConfigured": db_configured,
     }
@@ -518,6 +520,10 @@ def status() -> Dict[str, Any]:
     debug["pred_far_24_raw"] = pred_far_24_raw
     debug["pred_far_48_raw"] = pred_far_48_raw
     debug["dew_point_computed"] = dp_computed
+    debug["model24h_path"] = str(MODEL_24H_PATH)
+    debug["model48h_path"] = str(MODEL_48H_PATH)
+    debug["model24h_type"] = type(_model_24h).__name__ if _model_24h is not None else None
+    debug["model48h_type"] = type(_model_48h).__name__ if _model_48h is not None else None
 
     # Option A: estimate near-side based on far-side delta.
     pred_near_24 = None
