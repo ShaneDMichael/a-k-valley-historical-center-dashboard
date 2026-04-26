@@ -185,7 +185,7 @@ function renderBasementForecast(report) {
       <div class="basement-risk-head">
         <div></div>
         <div><strong>Mold risk</strong></div>
-        <div><strong>(RH%)</strong></div>
+        <div><strong>RH%</strong></div>
       </div>
       ${rowFor('Current', curRhVal)}
       ${rowFor('24 hr forecast', f24RhVal)}
