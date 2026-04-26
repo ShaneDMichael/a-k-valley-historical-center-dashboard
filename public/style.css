@@ -142,7 +142,7 @@ min-height: 0; /* IMPORTANT for scrolling inside flex containers */
   border: 1.5px solid rgba(80, 140, 255, 0.55);
   background: rgba(10, 14, 28, 0.65);
   color: rgba(232, 238, 255, 0.92);
-  font-weight: 700;
+  font-weight: 650;
   cursor: pointer;
 }
 
