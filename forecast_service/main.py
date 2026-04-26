@@ -14,7 +14,7 @@ import requests
 from fastapi import FastAPI
 
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.1"
 
 CACHE_DIR = Path(os.getenv("CACHE_DIR", "/var/data")).resolve()
 
@@ -441,12 +441,17 @@ def status() -> Dict[str, Any]:
     far_dp = _safe_float(far.get("dew_point_f"))
     near_dp = _safe_float(near.get("dew_point_f"))
 
+    dp_computed = {"basement_far": False, "basement_near": False, "outside": False}
+
     if far_dp is None:
         far_dp = _dew_point_f_from_temp_rh(far_temp, far_rh)
+        dp_computed["basement_far"] = far_dp is not None
     if near_dp is None:
         near_dp = _dew_point_f_from_temp_rh(near_temp, near_rh)
+        dp_computed["basement_near"] = near_dp is not None
     if out_dp is None:
         out_dp = _dew_point_f_from_temp_rh(out_temp, _safe_float(outside.get("humidity_percent")))
+        dp_computed["outside"] = out_dp is not None
 
     # Insert readings into Postgres.
     try:
@@ -495,12 +500,24 @@ def status() -> Dict[str, Any]:
 
     pred_far_24 = None
     pred_far_48 = None
+    pred_far_24_raw = None
+    pred_far_48_raw = None
     if not X_row.empty:
         try:
-            pred_far_24 = _safe_float(float(_model_24h.predict(X_row)[0]))
-            pred_far_48 = _safe_float(float(_model_48h.predict(X_row)[0]))
+            pred_far_24_raw = _safe_float(float(_model_24h.predict(X_row)[0]))
+            pred_far_48_raw = _safe_float(float(_model_48h.predict(X_row)[0]))
+            pred_far_24 = pred_far_24_raw
+            pred_far_48 = pred_far_48_raw
         except Exception as e:
             warnings.append(f"predict_failed:{str(e)}")
+
+    try:
+        debug["feature_nan_cells"] = int(X_row.isna().sum().sum()) if not X_row.empty else None
+    except Exception:
+        debug["feature_nan_cells"] = None
+    debug["pred_far_24_raw"] = pred_far_24_raw
+    debug["pred_far_48_raw"] = pred_far_48_raw
+    debug["dew_point_computed"] = dp_computed
 
     # Option A: estimate near-side based on far-side delta.
     pred_near_24 = None
