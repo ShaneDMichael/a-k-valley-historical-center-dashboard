@@ -1,5 +1,6 @@
 import os
 import time
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -239,6 +240,13 @@ def _build_feature_row(now_utc: datetime) -> Tuple[pd.DataFrame, Dict[str, Any]]
             part[c] = pd.to_numeric(part[c], errors="coerce")
         # Mean in case of duplicates; then resample and forward-fill.
         part = part.resample("1min").mean(numeric_only=True).ffill()
+        if "dew_point_f" in part.columns and "temp_f" in part.columns and "rh_percent" in part.columns:
+            missing_dp = part["dew_point_f"].isna()
+            if missing_dp.any():
+                part.loc[missing_dp, "dew_point_f"] = [
+                    _dew_point_f_from_temp_rh(t, rh)
+                    for t, rh in zip(part.loc[missing_dp, "temp_f"], part.loc[missing_dp, "rh_percent"], strict=False)
+                ]
         part = part.reindex(columns=["temp_f", "rh_percent", "dew_point_f"])
         wide_parts[role] = part
 
@@ -316,6 +324,26 @@ def _risk_from_rh(rh: Optional[float]) -> str:
     if rh is None or not isinstance(rh, (int, float)) or np.isnan(float(rh)):
         return "unknown"
     return "elevated" if float(rh) >= MOLD_RH_THRESHOLD else "ok"
+
+
+def _dew_point_f_from_temp_rh(temp_f: Optional[float], rh_percent: Optional[float]) -> Optional[float]:
+    if temp_f is None or rh_percent is None:
+        return None
+    try:
+        t_c = (float(temp_f) - 32.0) * (5.0 / 9.0)
+        rh = float(rh_percent)
+        if np.isnan(t_c) or np.isnan(rh) or rh <= 0.0 or rh > 100.0:
+            return None
+        a = 17.625
+        b = 243.04
+        gamma = (a * t_c) / (b + t_c) + math.log(rh / 100.0)
+        dp_c = (b * gamma) / (a - gamma)
+        dp_f = dp_c * (9.0 / 5.0) + 32.0
+        if np.isnan(dp_f) or np.isinf(dp_f):
+            return None
+        return float(dp_f)
+    except Exception:
+        return None
 
 
 def _safe_float(v: Any) -> Optional[float]:
@@ -408,20 +436,32 @@ def status() -> Dict[str, Any]:
     out_temp = _safe_float(outside.get("temperature_f"))
     out_dp = _safe_float(outside.get("dew_point_f"))
 
+    far_temp = _safe_float(far.get("temperature_f"))
+    near_temp = _safe_float(near.get("temperature_f"))
+    far_dp = _safe_float(far.get("dew_point_f"))
+    near_dp = _safe_float(near.get("dew_point_f"))
+
+    if far_dp is None:
+        far_dp = _dew_point_f_from_temp_rh(far_temp, far_rh)
+    if near_dp is None:
+        near_dp = _dew_point_f_from_temp_rh(near_temp, near_rh)
+    if out_dp is None:
+        out_dp = _dew_point_f_from_temp_rh(out_temp, _safe_float(outside.get("humidity_percent")))
+
     # Insert readings into Postgres.
     try:
         _insert_reading(
             "basement_far",
-            _safe_float(far.get("temperature_f")),
+            far_temp,
             far_rh,
-            _safe_float(far.get("dew_point_f")),
+            far_dp,
             now_min,
         )
         _insert_reading(
             "basement_near",
-            _safe_float(near.get("temperature_f")),
+            near_temp,
             near_rh,
-            _safe_float(near.get("dew_point_f")),
+            near_dp,
             now_min,
         )
         _insert_reading(
