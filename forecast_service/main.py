@@ -19,6 +19,9 @@ CACHE_DIR = Path(os.getenv("CACHE_DIR", "/var/data")).resolve()
 
 MOLD_RH_THRESHOLD = float(os.getenv("MOLD_RH_THRESHOLD", "50"))
 
+RISK_DAY_TZ = os.getenv("RISK_DAY_TZ", "America/New_York")
+RISK_DAY_START_HOUR_LOCAL = int(os.getenv("RISK_DAY_START_HOUR_LOCAL", "18"))
+
 SWITCHBOT_TOKEN = os.getenv("SWITCHBOT_TOKEN")
 SWITCHBOT_SECRET = os.getenv("SWITCHBOT_SECRET")
 SWITCHBOT_BASEMENT_FAR_DEVICE_ID = os.getenv("SWITCHBOT_BASEMENT_FAR_DEVICE_ID")
@@ -179,6 +182,41 @@ def _fetch_history(start_ts: datetime, end_ts: datetime) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     df["ts"] = pd.to_datetime(df["ts"], utc=True)
     return df
+
+
+def _count_risk_days() -> int:
+    """Count distinct 'risk days' where max basement RH >= threshold.
+
+    A 'risk day' is defined as the local time interval [6pm, 6pm) in RISK_DAY_TZ.
+    """
+
+    hour = int(RISK_DAY_START_HOUR_LOCAL)
+    if hour < 0 or hour > 23:
+        hour = 18
+
+    with _db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                with per_ts as (
+                  select ts, max(rh_percent) as rh_max
+                  from sensor_readings
+                  where role in ('basement_far', 'basement_near')
+                  group by ts
+                ),
+                risk_days as (
+                  select date_trunc('day', (ts at time zone %s) - make_interval(hours => %s)) as risk_day
+                  from per_ts
+                  where rh_max is not null and rh_max >= %s
+                  group by 1
+                )
+                select count(*)::int from risk_days;
+                """,
+                (RISK_DAY_TZ, hour, float(MOLD_RH_THRESHOLD)),
+            )
+            row = cur.fetchone()
+
+    return int(row[0] or 0)
 
 
 def _build_feature_row(now_utc: datetime) -> Tuple[pd.DataFrame, Dict[str, Any]]:
@@ -400,6 +438,12 @@ def status() -> Dict[str, Any]:
     if far_rh is not None and near_rh is not None:
         current_rh_max = float(max(far_rh, near_rh))
 
+    risk_days = None
+    try:
+        risk_days = _count_risk_days()
+    except Exception as e:
+        warnings.append(f"risk_days_failed:{str(e)}")
+
     # Build feature row (from stored history).
     try:
         _load_models()
@@ -447,6 +491,7 @@ def status() -> Dict[str, Any]:
 
     resp = {
         "updated_at": datetime.now(timezone.utc).isoformat(),
+        "risk_days": risk_days,
         "current": {
             "rh_max_percent": round(current_rh_max, 1) if current_rh_max is not None else None,
             "risk_status": _risk_from_rh(current_rh_max),

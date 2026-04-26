@@ -146,22 +146,56 @@ function renderBasementForecast(report) {
 
   const updatedAt = report && report.updated_at ? fmtLocalHour(report.updated_at) : '—';
 
-  const curRh = report && report.current && typeof report.current.rh_max_percent === 'number' ? `${report.current.rh_max_percent.toFixed(1)}%` : '—';
-  const curRisk = report && report.current && typeof report.current.risk_status === 'string' ? report.current.risk_status : '—';
+  function riskLabelFromRh(rh) {
+    if (typeof rh !== 'number' || Number.isNaN(rh)) return '—';
+    if (rh < 50) return 'none';
+    if (rh < 60) return 'low';
+    if (rh < 70) return 'med';
+    return 'high';
+  }
 
-  const f24Rh = report && report.forecast_24h && typeof report.forecast_24h.rh_max_percent === 'number' ? `${report.forecast_24h.rh_max_percent.toFixed(1)}%` : '—';
-  const f24Risk = report && report.forecast_24h && typeof report.forecast_24h.risk_status === 'string' ? report.forecast_24h.risk_status : '—';
+  function fmtRh(rh) {
+    return typeof rh === 'number' && !Number.isNaN(rh) ? `${rh.toFixed(1)}%` : '—';
+  }
 
-  const f48Rh = report && report.forecast_48h && typeof report.forecast_48h.rh_max_percent === 'number' ? `${report.forecast_48h.rh_max_percent.toFixed(1)}%` : '—';
-  const f48Risk = report && report.forecast_48h && typeof report.forecast_48h.risk_status === 'string' ? report.forecast_48h.risk_status : '—';
+  function rowFor(label, rh) {
+    const risk = riskLabelFromRh(rh);
+    const rhStr = fmtRh(rh);
+    return `
+      <div class="basement-risk-row">
+        <div class="label"><strong>${label}</strong></div>
+        <div class="risk">${risk}</div>
+        <div class="rh">(${rhStr})</div>
+      </div>
+    `;
+  }
+
+  const curRhVal = report && report.current && typeof report.current.rh_max_percent === 'number' ? report.current.rh_max_percent : null;
+  const f24RhVal = report && report.forecast_24h && typeof report.forecast_24h.rh_max_percent === 'number' ? report.forecast_24h.rh_max_percent : null;
+  const f48RhVal = report && report.forecast_48h && typeof report.forecast_48h.rh_max_percent === 'number' ? report.forecast_48h.rh_max_percent : null;
+
+  const fallbackRiskDays = [curRhVal, f24RhVal, f48RhVal].filter((v) => typeof v === 'number' && !Number.isNaN(v) && v >= 50).length;
+  const riskDays = report && typeof report.risk_days === 'number' && !Number.isNaN(report.risk_days) ? report.risk_days : fallbackRiskDays;
 
   const warnings = report && Array.isArray(report.warnings) ? report.warnings : [];
   const warningLine = warnings.length ? `<div><strong>Note:</strong> ${String(warnings[0])}</div>` : '';
 
   basementForecastPanel.innerHTML = `
-    <div><strong>Basement RH (current):</strong> ${curRh} (${curRisk})</div>
-    <div><strong>Forecast +24h:</strong> ${f24Rh} (${f24Risk})</div>
-    <div><strong>Forecast +48h:</strong> ${f48Rh} (${f48Risk})</div>
+    <div class="basement-risk-grid">
+      <div class="basement-risk-head">
+        <div></div>
+        <div><strong>Mold risk</strong></div>
+        <div><strong>(RH%)</strong></div>
+      </div>
+      ${rowFor('Current', curRhVal)}
+      ${rowFor('24 hr forecast', f24RhVal)}
+      ${rowFor('48 hr forecast', f48RhVal)}
+      <div class="basement-risk-row">
+        <div class="label"><strong>No. of risk days</strong></div>
+        <div class="risk">${riskDays}</div>
+        <div class="rh"></div>
+      </div>
+    </div>
     <div><strong>Updated:</strong> ${updatedAt}</div>
     ${warningLine}
   `;
