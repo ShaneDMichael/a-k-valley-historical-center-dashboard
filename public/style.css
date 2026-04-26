@@ -179,6 +179,11 @@ min-height: 0; /* IMPORTANT for scrolling inside flex containers */
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.basement-risk-head > :nth-child(2),
+.basement-risk-head > :nth-child(3) {
+  text-align: right;
+}
+
 .basement-risk-row {
   padding: 2px 0;
 }
