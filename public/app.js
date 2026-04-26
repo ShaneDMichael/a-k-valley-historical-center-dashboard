@@ -155,7 +155,7 @@ function renderBasementForecast(report) {
   }
 
   function fmtRh(rh) {
-    return typeof rh === 'number' && !Number.isNaN(rh) ? `${rh.toFixed(1)}%` : '—';
+    return typeof rh === 'number' && !Number.isNaN(rh) ? `${rh.toFixed(0)}%` : '—';
   }
 
   function rowFor(label, rh) {
@@ -165,7 +165,7 @@ function renderBasementForecast(report) {
       <div class="basement-risk-row">
         <div class="label"><strong>${label}</strong></div>
         <div class="risk">${risk}</div>
-        <div class="rh">(${rhStr})</div>
+        <div class="rh">${rhStr}</div>
       </div>
     `;
   }

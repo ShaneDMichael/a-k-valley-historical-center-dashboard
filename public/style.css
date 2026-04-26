@@ -179,6 +179,14 @@ min-height: 0; /* IMPORTANT for scrolling inside flex containers */
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.basement-risk-row {
+  padding: 2px 0;
+}
+
+.basement-risk-row .label {
+  white-space: nowrap;
+}
+
 .basement-risk-row .risk,
 .basement-risk-row .rh {
   text-align: right;
