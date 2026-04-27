@@ -14,6 +14,7 @@ from main import (
     SWITCHBOT_OUTSIDE_TOKEN,
     SWITCHBOT_SECRET,
     SWITCHBOT_TOKEN,
+    _dew_point_f_from_temp_rh,
     _ensure_tables,
     _insert_reading,
     _round_to_minute,
@@ -130,37 +131,52 @@ def _poll_once() -> None:
         secret=str(SWITCHBOT_OUTSIDE_SECRET),
     )
 
+    far_temp = _safe_float(far.get("temperature_f"))
+    far_rh = _safe_float(far.get("humidity_percent"))
+    far_dp = _safe_float(far.get("dew_point_f"))
+    if far_dp is None:
+        far_dp = _dew_point_f_from_temp_rh(far_temp, far_rh)
+
+    near_temp = _safe_float(near.get("temperature_f"))
+    near_rh = _safe_float(near.get("humidity_percent"))
+    near_dp = _safe_float(near.get("dew_point_f"))
+    if near_dp is None:
+        near_dp = _dew_point_f_from_temp_rh(near_temp, near_rh)
+
+    out_temp = _safe_float(outside.get("temperature_f"))
+    out_rh = _safe_float(outside.get("humidity_percent"))
+    out_dp = _safe_float(outside.get("dew_point_f"))
+    out_dp_computed = False
+    if out_dp is None:
+        out_dp = _dew_point_f_from_temp_rh(out_temp, out_rh)
+        out_dp_computed = out_dp is not None
+
     _insert_reading(
         "basement_far",
-        _safe_float(far.get("temperature_f")),
-        _safe_float(far.get("humidity_percent")),
-        _safe_float(far.get("dew_point_f")),
+        far_temp,
+        far_rh,
+        far_dp,
         now_min,
     )
     _insert_reading(
         "basement_near",
-        _safe_float(near.get("temperature_f")),
-        _safe_float(near.get("humidity_percent")),
-        _safe_float(near.get("dew_point_f")),
+        near_temp,
+        near_rh,
+        near_dp,
         now_min,
     )
     _insert_reading(
         "outside",
-        _safe_float(outside.get("temperature_f")),
-        _safe_float(outside.get("humidity_percent")),
-        _safe_float(outside.get("dew_point_f")),
+        out_temp,
+        out_rh,
+        out_dp,
         now_min,
     )
-
-    far_rh = _safe_float(far.get("humidity_percent"))
-    near_rh = _safe_float(near.get("humidity_percent"))
-    out_t = _safe_float(outside.get("temperature_f"))
-    out_dp = _safe_float(outside.get("dew_point_f"))
 
     _heartbeat(
         "ok "
         f"far_rh={far_rh} near_rh={near_rh} "
-        f"out_temp_f={out_t} out_dp_f={out_dp}"
+        f"out_temp_f={out_temp} out_rh={out_rh} out_dp_f={out_dp} out_dp_computed={out_dp_computed}"
     )
 
 
