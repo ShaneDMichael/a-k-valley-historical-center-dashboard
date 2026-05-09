@@ -34,9 +34,11 @@ SWITCHBOT_OUTSIDE_DEVICE_ID = os.getenv("SWITCHBOT_OUTSIDE_DEVICE_ID")
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-MODELS_DIR = Path(os.getenv("MODELS_DIR", str(Path(__file__).parent / "models"))).resolve()
-MODEL_24H_PATH = Path(os.getenv("MODEL_24H_PATH", str(MODELS_DIR / "basement_rh_rf_24h.joblib"))).resolve()
-MODEL_48H_PATH = Path(os.getenv("MODEL_48H_PATH", str(MODELS_DIR / "basement_rh_rf_48h.joblib"))).resolve()
+MODELS_DIR = Path(os.getenv("MODELS_DIR", str(Path(__file__).resolve().parent / "models"))).resolve()
+
+# Default models. Can be overridden via env vars.
+MODEL_24H_PATH = Path(os.getenv("MODEL_24H_PATH", str(MODELS_DIR / "basement_rhmax_rf_24h.joblib"))).resolve()
+MODEL_48H_PATH = Path(os.getenv("MODEL_48H_PATH", str(MODELS_DIR / "basement_rhmax_rf_48h.joblib"))).resolve()
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "akv-forecast-service/0.1"})
@@ -137,6 +139,25 @@ def _ensure_tables() -> None:
                   dew_point_f double precision,
                   primary key (ts, source)
                 );
+                """
+            )
+            cur.execute(
+                """
+                create table if not exists weather_forecast_points (
+                  run_ts timestamptz not null,
+                  target_ts timestamptz not null,
+                  source text not null,
+                  temp_f double precision,
+                  rh_percent double precision,
+                  dew_point_f double precision,
+                  primary key (run_ts, target_ts, source)
+                );
+                """
+            )
+            cur.execute(
+                """
+                create index if not exists weather_forecast_points_target_ts_idx
+                on weather_forecast_points (target_ts);
                 """
             )
         conn.commit()
@@ -251,6 +272,7 @@ def _build_feature_row(now_utc: datetime) -> Tuple[pd.DataFrame, Dict[str, Any]]
         wide_parts[role] = part
 
     far = wide_parts.get("basement_far")
+    near = wide_parts.get("basement_near")
     out = wide_parts.get("outside")
 
     if far is None or out is None or far.empty or out.empty:
@@ -275,9 +297,29 @@ def _build_feature_row(now_utc: datetime) -> Tuple[pd.DataFrame, Dict[str, Any]]
 
     idx = far.index.union(out.index).sort_values()
     df = pd.DataFrame(index=idx)
-    df["basement_temp_mid_f"] = far.reindex(idx)["temp_f"]
-    df["basement_mid_rh_percent"] = far.reindex(idx)["rh_percent"]
-    df["basement_mid_dew_point_f"] = far.reindex(idx)["dew_point_f"]
+    df["basement_temp_far_f"] = far.reindex(idx)["temp_f"]
+    df["basement_far_rh_percent"] = far.reindex(idx)["rh_percent"]
+    df["basement_far_dew_point_f"] = far.reindex(idx)["dew_point_f"]
+
+    if near is not None and not near.empty:
+        idx = idx.union(near.index).sort_values()
+        df = df.reindex(idx)
+        df["basement_temp_near_f"] = near.reindex(idx)["temp_f"]
+        df["basement_near_rh_percent"] = near.reindex(idx)["rh_percent"]
+        df["basement_near_dew_point_f"] = near.reindex(idx)["dew_point_f"]
+    else:
+        df["basement_temp_near_f"] = np.nan
+        df["basement_near_rh_percent"] = np.nan
+        df["basement_near_dew_point_f"] = np.nan
+
+    df["basement_near_rh_missing"] = df["basement_near_rh_percent"].isna().astype(int)
+    df["basement_temp_near_missing"] = df["basement_temp_near_f"].isna().astype(int)
+    df["basement_near_dew_point_missing"] = df["basement_near_dew_point_f"].isna().astype(int)
+
+    df["basement_rh_max_percent"] = df["basement_far_rh_percent"].where(
+        df["basement_near_rh_percent"].isna(),
+        np.maximum(df["basement_far_rh_percent"], df["basement_near_rh_percent"]),
+    )
     df["outside_temp_f"] = out.reindex(idx)["temp_f"]
     df["outside_dew_point_f"] = out.reindex(idx)["dew_point_f"]
 
@@ -290,24 +332,31 @@ def _build_feature_row(now_utc: datetime) -> Tuple[pd.DataFrame, Dict[str, Any]]
     df["cos_dow"] = np.cos(2 * np.pi * dow / 7.0)
 
     # Derived features
-    df["dew_point_diff_f"] = df["outside_dew_point_f"] - df["basement_mid_dew_point_f"]
-    df["temp_diff_f"] = df["outside_temp_f"] - df["basement_temp_mid_f"]
+    df["dew_point_diff_f"] = df["outside_dew_point_f"] - df["basement_far_dew_point_f"]
+    df["temp_diff_f"] = df["outside_temp_f"] - df["basement_temp_far_f"]
 
     # Lag features
     steps_per_hour = 60
     for h in (1, 2, 3):
         shift = h * steps_per_hour
         for c in (
-            "basement_temp_mid_f",
-            "basement_mid_dew_point_f",
-            "basement_mid_rh_percent",
+            "basement_temp_far_f",
+            "basement_far_dew_point_f",
+            "basement_far_rh_percent",
+            "basement_temp_near_f",
+            "basement_near_dew_point_f",
+            "basement_near_rh_percent",
+            "basement_near_rh_missing",
+            "basement_temp_near_missing",
+            "basement_near_dew_point_missing",
+            "basement_rh_max_percent",
             "outside_temp_f",
             "outside_dew_point_f",
         ):
             df[f"{c}_lag_{h}h"] = df[c].shift(shift)
 
     for m in (1, 5, 15, 30, 60):
-        df[f"basement_mid_rh_percent_lag_{m}m"] = df["basement_mid_rh_percent"].shift(m)
+        df[f"basement_rh_max_percent_lag_{m}m"] = df["basement_rh_max_percent"].shift(m)
 
     # Select feature row at now.
     if now_utc not in df.index:
@@ -482,8 +531,11 @@ def status() -> Dict[str, Any]:
         warnings.append(f"db_insert_failed:{str(e)}")
 
     current_rh_max = None
-    if far_rh is not None and near_rh is not None:
-        current_rh_max = float(max(far_rh, near_rh))
+    if far_rh is not None:
+        if near_rh is None:
+            current_rh_max = float(far_rh)
+        else:
+            current_rh_max = float(max(far_rh, near_rh))
 
     risk_days = None
     try:
@@ -525,15 +577,6 @@ def status() -> Dict[str, Any]:
     debug["model24h_type"] = type(_model_24h).__name__ if _model_24h is not None else None
     debug["model48h_type"] = type(_model_48h).__name__ if _model_48h is not None else None
 
-    # Option A: estimate near-side based on far-side delta.
-    pred_near_24 = None
-    pred_near_48 = None
-    if near_rh is not None and far_rh is not None:
-        if pred_far_24 is not None:
-            pred_near_24 = float(near_rh + (pred_far_24 - far_rh))
-        if pred_far_48 is not None:
-            pred_near_48 = float(near_rh + (pred_far_48 - far_rh))
-
     # Clamp predictions to [0, 100].
     def _clamp(v: Optional[float]) -> Optional[float]:
         if v is None:
@@ -542,15 +585,10 @@ def status() -> Dict[str, Any]:
 
     pred_far_24 = _clamp(pred_far_24)
     pred_far_48 = _clamp(pred_far_48)
-    pred_near_24 = _clamp(pred_near_24)
-    pred_near_48 = _clamp(pred_near_48)
 
-    f24_max = None
-    f48_max = None
-    if pred_far_24 is not None and pred_near_24 is not None:
-        f24_max = float(max(pred_far_24, pred_near_24))
-    if pred_far_48 is not None and pred_near_48 is not None:
-        f48_max = float(max(pred_far_48, pred_near_48))
+    # The rhmax models predict the max-RH signal directly.
+    f24_max = pred_far_24
+    f48_max = pred_far_48
 
     resp = {
         "updated_at": datetime.now(timezone.utc).isoformat(),

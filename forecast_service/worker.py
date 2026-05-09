@@ -28,6 +28,7 @@ WEATHER_POLL_SECONDS = int(os.getenv("WEATHER_POLL_SECONDS", "900"))
 OPEN_METEO_LAT = float(os.getenv("OPEN_METEO_LAT", "40.602722"))
 OPEN_METEO_LON = float(os.getenv("OPEN_METEO_LON", "-79.75420"))
 OPEN_METEO_TZ = os.getenv("OPEN_METEO_TZ", "America/New_York")
+OPEN_METEO_FORECAST_DAYS = int(os.getenv("OPEN_METEO_FORECAST_DAYS", "3"))
 
 _SESSION = requests.Session()
 _SESSION.headers.update({"User-Agent": "akv-forecast-worker/0.1"})
@@ -70,6 +71,27 @@ def _insert_weather_forecast(ts_utc: datetime, temp_f: Optional[float], rh: Opti
         conn.commit()
 
 
+def _insert_weather_forecast_point(
+    *, run_ts_utc: datetime, target_ts_utc: datetime, temp_f: Optional[float], rh: Optional[float], dew_point_f: Optional[float]
+) -> None:
+    from main import _db_connect
+
+    with _db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into weather_forecast_points (run_ts, target_ts, source, temp_f, rh_percent, dew_point_f)
+                values (%s, %s, %s, %s, %s, %s)
+                on conflict (run_ts, target_ts, source) do update set
+                  temp_f = excluded.temp_f,
+                  rh_percent = excluded.rh_percent,
+                  dew_point_f = excluded.dew_point_f;
+                """,
+                (run_ts_utc, target_ts_utc, "open_meteo", temp_f, rh, dew_point_f),
+            )
+        conn.commit()
+
+
 def _refresh_open_meteo_hourly() -> Dict[str, Any]:
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
@@ -77,7 +99,7 @@ def _refresh_open_meteo_hourly() -> Dict[str, Any]:
         "longitude": OPEN_METEO_LON,
         "hourly": "temperature_2m,relative_humidity_2m,dew_point_2m",
         "timezone": OPEN_METEO_TZ,
-        "forecast_days": 3,
+        "forecast_days": OPEN_METEO_FORECAST_DAYS,
     }
     resp = _SESSION.get(url, params=params, timeout=20)
     resp.raise_for_status()
@@ -93,20 +115,51 @@ def _refresh_open_meteo_hourly() -> Dict[str, Any]:
     if n == 0:
         return {"inserted": 0}
 
+    run_ts_utc = datetime.now(timezone.utc)
     inserted = 0
-    for i in range(n):
-        # Open-Meteo returns local-time strings; we store as UTC.
-        t_local = times[i]
-        ts = datetime.fromisoformat(t_local)
-        ts_utc = ts.astimezone(timezone.utc)
+    inserted_points = 0
+    from main import _db_connect
 
-        temp_f = _f_from_c(_safe_float(temps_c[i]))
-        rh = _safe_float(rhs[i])
-        dp_f = _f_from_c(_safe_float(dps_c[i]))
-        _insert_weather_forecast(ts_utc, temp_f, rh, dp_f)
-        inserted += 1
+    with _db_connect() as conn:
+        with conn.cursor() as cur:
+            for i in range(n):
+                # Open-Meteo returns local-time strings; we store as UTC.
+                t_local = times[i]
+                ts = datetime.fromisoformat(t_local)
+                ts_utc = ts.astimezone(timezone.utc)
 
-    return {"inserted": int(inserted), "hours": int(n)}
+                temp_f = _f_from_c(_safe_float(temps_c[i]))
+                rh = _safe_float(rhs[i])
+                dp_f = _f_from_c(_safe_float(dps_c[i]))
+
+                cur.execute(
+                    """
+                    insert into weather_forecasts (ts, source, temp_f, rh_percent, dew_point_f)
+                    values (%s, %s, %s, %s, %s)
+                    on conflict (ts, source) do update set
+                      temp_f = excluded.temp_f,
+                      rh_percent = excluded.rh_percent,
+                      dew_point_f = excluded.dew_point_f;
+                    """,
+                    (ts_utc, "open_meteo", temp_f, rh, dp_f),
+                )
+                inserted += 1
+
+                cur.execute(
+                    """
+                    insert into weather_forecast_points (run_ts, target_ts, source, temp_f, rh_percent, dew_point_f)
+                    values (%s, %s, %s, %s, %s, %s)
+                    on conflict (run_ts, target_ts, source) do update set
+                      temp_f = excluded.temp_f,
+                      rh_percent = excluded.rh_percent,
+                      dew_point_f = excluded.dew_point_f;
+                    """,
+                    (run_ts_utc, ts_utc, "open_meteo", temp_f, rh, dp_f),
+                )
+                inserted_points += 1
+        conn.commit()
+
+    return {"inserted": int(inserted), "inserted_points": int(inserted_points), "hours": int(n)}
 
 
 def _poll_once() -> None:
@@ -215,7 +268,9 @@ def main() -> None:
         if now_s >= next_weather:
             try:
                 info = _refresh_open_meteo_hourly()
-                _heartbeat(f"open_meteo_ok inserted={info.get('inserted')}")
+                _heartbeat(
+                    f"open_meteo_ok inserted={info.get('inserted')} inserted_points={info.get('inserted_points')}"
+                )
             except Exception as e:
                 _heartbeat(f"open_meteo_failed: {e}")
             next_weather = now_s + WEATHER_POLL_SECONDS
