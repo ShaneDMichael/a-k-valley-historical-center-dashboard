@@ -1,7 +1,7 @@
 import os
 import time
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -33,6 +33,10 @@ SWITCHBOT_OUTSIDE_SECRET = os.getenv("SWITCHBOT_OUTSIDE_SECRET")
 SWITCHBOT_OUTSIDE_DEVICE_ID = os.getenv("SWITCHBOT_OUTSIDE_DEVICE_ID")
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+
+CALIBRATION_LOOKBACK_DAYS = int(os.getenv("CALIBRATION_LOOKBACK_DAYS", "14"))
+CALIBRATION_MIN_SAMPLES = int(os.getenv("CALIBRATION_MIN_SAMPLES", "20"))
+CALIBRATION_MAX_ABS_OFFSET = float(os.getenv("CALIBRATION_MAX_ABS_OFFSET", "20"))
 
 MODELS_DIR = Path(os.getenv("MODELS_DIR", str(Path(__file__).resolve().parent / "models"))).resolve()
 
@@ -160,7 +164,123 @@ def _ensure_tables() -> None:
                 on weather_forecast_points (target_ts);
                 """
             )
+            cur.execute(
+                """
+                create table if not exists forecast_predictions (
+                  run_ts timestamptz not null,
+                  horizon_hours int not null,
+                  predicted_rh_max double precision,
+                  predicted_rh_max_raw double precision,
+                  model_24h_path text,
+                  model_48h_path text,
+                  app_version text,
+                  created_at timestamptz not null default now(),
+                  primary key (run_ts, horizon_hours)
+                );
+                """
+            )
+            cur.execute(
+                """
+                create index if not exists forecast_predictions_horizon_run_ts_idx
+                on forecast_predictions (horizon_hours, run_ts);
+                """
+            )
         conn.commit()
+
+
+def _insert_forecast_prediction(
+    *, run_ts: datetime, horizon_hours: int, predicted: Optional[float], predicted_raw: Optional[float]
+) -> None:
+    with _db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into forecast_predictions (
+                  run_ts,
+                  horizon_hours,
+                  predicted_rh_max,
+                  predicted_rh_max_raw,
+                  model_24h_path,
+                  model_48h_path,
+                  app_version
+                )
+                values (%s, %s, %s, %s, %s, %s, %s)
+                on conflict (run_ts, horizon_hours) do update set
+                  predicted_rh_max = excluded.predicted_rh_max,
+                  predicted_rh_max_raw = excluded.predicted_rh_max_raw,
+                  model_24h_path = excluded.model_24h_path,
+                  model_48h_path = excluded.model_48h_path,
+                  app_version = excluded.app_version;
+                """,
+                (
+                    run_ts,
+                    int(horizon_hours),
+                    predicted,
+                    predicted_raw,
+                    str(MODEL_24H_PATH),
+                    str(MODEL_48H_PATH),
+                    str(APP_VERSION),
+                ),
+            )
+        conn.commit()
+
+
+def _get_calibration_offset(*, horizon_hours: int, now_utc: datetime) -> tuple[Optional[float], int]:
+    lookback_days = int(max(1, CALIBRATION_LOOKBACK_DAYS))
+    horizon_hours = int(horizon_hours)
+
+    start_ts = now_utc - timedelta(days=lookback_days)
+
+    with _db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                with per_ts as (
+                  select ts, max(rh_percent) as rh_max
+                  from sensor_readings
+                  where role in ('basement_far', 'basement_near')
+                  group by ts
+                ),
+                matched as (
+                  select
+                    p.run_ts,
+                    p.predicted_rh_max as pred,
+                    s.rh_max as actual
+                  from forecast_predictions p
+                  join per_ts s
+                    on s.ts = p.run_ts + (p.horizon_hours::text || ' hours')::interval
+                  where p.horizon_hours = %s
+                    and p.predicted_rh_max is not null
+                    and s.rh_max is not null
+                    and p.run_ts >= %s
+                    and p.run_ts <= %s
+                )
+                select
+                  percentile_cont(0.5) within group (order by (actual - pred)) as median_err,
+                  count(*)::int as n
+                from matched;
+                """,
+                (
+                    horizon_hours,
+                    start_ts,
+                    now_utc,
+                ),
+            )
+            row = cur.fetchone()
+
+    if not row:
+        return None, 0
+
+    median_err = row[0]
+    n = int(row[1] or 0)
+    if median_err is None:
+        return None, n
+
+    off = float(median_err)
+    max_abs = float(max(0.0, CALIBRATION_MAX_ABS_OFFSET))
+    if max_abs > 0:
+        off = float(max(-max_abs, min(max_abs, off)))
+    return off, n
 
 
 def _round_to_minute(dt: datetime) -> datetime:
@@ -590,6 +710,55 @@ def status() -> Dict[str, Any]:
     f24_max = pred_far_24
     f48_max = pred_far_48
 
+    cal = {
+        "min_samples": int(CALIBRATION_MIN_SAMPLES),
+        "lookback_days": int(CALIBRATION_LOOKBACK_DAYS),
+        "max_abs_offset": float(CALIBRATION_MAX_ABS_OFFSET),
+        "offset_24h": None,
+        "offset_24h_n": 0,
+        "offset_48h": None,
+        "offset_48h_n": 0,
+        "applied_24h": False,
+        "applied_48h": False,
+    }
+
+    try:
+        off24, n24 = _get_calibration_offset(horizon_hours=24, now_utc=now)
+        cal["offset_24h"] = off24
+        cal["offset_24h_n"] = int(n24)
+        if f24_max is not None and off24 is not None and int(n24) >= int(CALIBRATION_MIN_SAMPLES):
+            f24_max = _clamp(_safe_float(float(f24_max) + float(off24)))
+            cal["applied_24h"] = True
+    except Exception as e:
+        warnings.append(f"calibration_24h_failed:{str(e)}")
+
+    try:
+        off48, n48 = _get_calibration_offset(horizon_hours=48, now_utc=now)
+        cal["offset_48h"] = off48
+        cal["offset_48h_n"] = int(n48)
+        if f48_max is not None and off48 is not None and int(n48) >= int(CALIBRATION_MIN_SAMPLES):
+            f48_max = _clamp(_safe_float(float(f48_max) + float(off48)))
+            cal["applied_48h"] = True
+    except Exception as e:
+        warnings.append(f"calibration_48h_failed:{str(e)}")
+
+    # Persist predictions for future calibration.
+    try:
+        _insert_forecast_prediction(
+            run_ts=now_min,
+            horizon_hours=24,
+            predicted=f24_max,
+            predicted_raw=pred_far_24_raw,
+        )
+        _insert_forecast_prediction(
+            run_ts=now_min,
+            horizon_hours=48,
+            predicted=f48_max,
+            predicted_raw=pred_far_48_raw,
+        )
+    except Exception as e:
+        warnings.append(f"forecast_prediction_log_failed:{str(e)}")
+
     resp = {
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "risk_days": risk_days,
@@ -608,5 +777,10 @@ def status() -> Dict[str, Any]:
         "warnings": warnings,
         "debug": debug,
     }
+
+    try:
+        resp["debug"]["calibration"] = cal
+    except Exception:
+        pass
 
     return resp
