@@ -492,7 +492,12 @@ def _build_feature_row(now_utc: datetime) -> Tuple[pd.DataFrame, Dict[str, Any]]
 def _risk_from_rh(rh: Optional[float]) -> str:
     if rh is None or not isinstance(rh, (int, float)) or np.isnan(float(rh)):
         return "unknown"
-    return "elevated" if float(rh) >= MOLD_RH_THRESHOLD else "ok"
+    v = float(rh)
+    if v >= 66.0:
+        return "high"
+    if v >= 60.0:
+        return "medium"
+    return "low"
 
 
 def _dew_point_f_from_temp_rh(temp_f: Optional[float], rh_percent: Optional[float]) -> Optional[float]:
@@ -685,6 +690,9 @@ def status() -> Dict[str, Any]:
         except Exception as e:
             warnings.append(f"predict_failed:{str(e)}")
 
+    model_used_24h = pred_far_24_raw is not None
+    model_used_48h = pred_far_48_raw is not None
+
     try:
         debug["feature_nan_cells"] = int(X_row.isna().sum().sum()) if not X_row.empty else None
     except Exception:
@@ -762,6 +770,8 @@ def status() -> Dict[str, Any]:
     resp = {
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "risk_days": risk_days,
+        "model_used_24h": bool(model_used_24h),
+        "model_used_48h": bool(model_used_48h),
         "current": {
             "rh_max_percent": round(current_rh_max, 1) if current_rh_max is not None else None,
             "risk_status": _risk_from_rh(current_rh_max),

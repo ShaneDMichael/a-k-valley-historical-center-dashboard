@@ -33,7 +33,7 @@ def risk_color(risk: str) -> str:
     r = (risk or "").lower()
     if r in {"high", "elevated", "risk"}:
         return "#b91c1c"
-    if r in {"moderate", "watch"}:
+    if r in {"medium", "moderate", "watch"}:
         return "#b45309"
     if r in {"low", "ok"}:
         return "#15803d"
@@ -44,7 +44,12 @@ def risk_from_rh(rh: float | None) -> str:
     if rh is None:
         return "unknown"
     try:
-        return "elevated" if float(rh) >= float(MOLD_RH_THRESHOLD) else "ok"
+        v = float(rh)
+        if v >= 66.0:
+            return "high"
+        if v >= 60.0:
+            return "medium"
+        return "low"
     except Exception:
         return "unknown"
 
@@ -169,8 +174,10 @@ def fmt_percent(v):
 
 f24_rh = f24.get("rh_max_percent")
 f48_rh = f48.get("rh_max_percent")
-f24_is_estimate = False
-f48_is_estimate = False
+model_used_24h = bool(status.get("model_used_24h"))
+model_used_48h = bool(status.get("model_used_48h"))
+f24_is_estimate = not model_used_24h
+f48_is_estimate = not model_used_48h
 
 if f24_rh is None:
     try:
