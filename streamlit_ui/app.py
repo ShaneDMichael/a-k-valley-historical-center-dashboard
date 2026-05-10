@@ -31,11 +31,13 @@ def fetch_status() -> dict:
 
 def risk_color(risk: str) -> str:
     r = (risk or "").lower()
-    if r in {"high", "elevated", "risk"}:
+    if r in {"high"}:
         return "#b91c1c"
-    if r in {"medium", "moderate", "watch"}:
+    if r in {"medium"}:
         return "#b45309"
-    if r in {"low", "ok"}:
+    if r in {"low"}:
+        return "#facc15"
+    if r in {"no", "ok"}:
         return "#15803d"
     return "#334155"
 
@@ -45,11 +47,13 @@ def risk_from_rh(rh: float | None) -> str:
         return "unknown"
     try:
         v = float(rh)
-        if v >= 66.0:
-            return "high"
-        if v >= 60.0:
+        if v < 50.0:
+            return "no"
+        if v <= 60.0:
+            return "low"
+        if v <= 65.0:
             return "medium"
-        return "low"
+        return "high"
     except Exception:
         return "unknown"
 
@@ -135,7 +139,7 @@ def format_updated_at(value) -> str:
 
 
 st.title("A-K Valley Heritage Center")
-st.header("Basement Humidity Forecast")
+st.header("Basement Humidity and Mold Risk Forecast")
 
 st.markdown(
     "<style>h1{font-size:3rem !important;}div[data-testid='stMetricLabel']{font-size:1.15rem !important;}div[data-testid='stMetricValue']{font-size:2.4rem !important;}</style>",

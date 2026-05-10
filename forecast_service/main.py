@@ -493,11 +493,13 @@ def _risk_from_rh(rh: Optional[float]) -> str:
     if rh is None or not isinstance(rh, (int, float)) or np.isnan(float(rh)):
         return "unknown"
     v = float(rh)
-    if v >= 66.0:
-        return "high"
-    if v >= 60.0:
+    if v < 50.0:
+        return "no"
+    if v <= 60.0:
+        return "low"
+    if v <= 65.0:
         return "medium"
-    return "low"
+    return "high"
 
 
 def _dew_point_f_from_temp_rh(temp_f: Optional[float], rh_percent: Optional[float]) -> Optional[float]:
