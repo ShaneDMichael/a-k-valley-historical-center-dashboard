@@ -65,6 +65,11 @@ def format_updated_at(value) -> str:
 st.title("A-K Valley Heritage Center")
 st.header("Basement Humidity Forecast")
 
+st.markdown(
+    "<style>h1{font-size:3rem !important;}</style>",
+    unsafe_allow_html=True,
+)
+
 if "last_refresh" not in st.session_state:
     st.session_state["last_refresh"] = time.time()
 
@@ -73,8 +78,6 @@ with bar_right:
     if st.button("Refresh now"):
         st.session_state["last_refresh"] = time.time()
         st.rerun()
-
-st.subheader("Current")
 
 try:
     status = fetch_status()
@@ -88,6 +91,14 @@ risk_days = status.get("risk_days")
 c = status.get("current") or {}
 f24 = status.get("forecast_24h") or {}
 f48 = status.get("forecast_48h") or {}
+
+def fmt_percent(v):
+    if v is None:
+        return "—"
+    try:
+        return f"{float(v):.0f}%"
+    except Exception:
+        return f"{v}%"
 
 f24_rh = f24.get("rh_max_percent")
 f48_rh = f48.get("rh_max_percent")
@@ -103,25 +114,34 @@ if f48_rh is None:
         f48_rh = None
 
 m1, m2, m3 = st.columns(3)
-m1.metric("Current Relative Humidity", c.get("rh_max_percent"))
-m2.metric("Forecast RH +24h", f24_rh)
-m3.metric("Forecast RH +48h", f48_rh)
+left, right = st.columns([1, 2])
+with left:
+    st.subheader("Current")
+    st.metric("Current Relative Humidity", fmt_percent(c.get("rh_max_percent")))
+    st.markdown(
+        f"<div style='padding:8px;border-radius:8px;background:{risk_color(c.get('risk_status'))};color:white'>Current Mold Risk Level: {c.get('risk_status')}</div>",
+        unsafe_allow_html=True,
+    )
 
-st.subheader("Forecast")
+with right:
+    st.subheader("Forecast")
+    fcol1, fcol2 = st.columns(2)
+    with fcol1:
+        st.metric("Forecast Relative Humidity +24h", fmt_percent(f24_rh))
+    with fcol2:
+        st.metric("Forecast Relative Humidity +48h", fmt_percent(f48_rh))
 
-r1, r2, r3 = st.columns(3)
-r1.markdown(
-    f"<div style='padding:8px;border-radius:8px;background:{risk_color(c.get('risk_status'))};color:white'>Current: {c.get('risk_status')}</div>",
-    unsafe_allow_html=True,
-)
-r2.markdown(
-    f"<div style='padding:8px;border-radius:8px;background:{risk_color(f24.get('risk_status'))};color:white'>+24h: {f24.get('risk_status')}</div>",
-    unsafe_allow_html=True,
-)
-r3.markdown(
-    f"<div style='padding:8px;border-radius:8px;background:{risk_color(f48.get('risk_status'))};color:white'>+48h: {f48.get('risk_status')}</div>",
-    unsafe_allow_html=True,
-)
+    rcol1, rcol2 = st.columns(2)
+    with rcol1:
+        st.markdown(
+            f"<div style='padding:8px;border-radius:8px;background:{risk_color(f24.get('risk_status'))};color:white'>+24h Mold Risk Level: {f24.get('risk_status')}</div>",
+            unsafe_allow_html=True,
+        )
+    with rcol2:
+        st.markdown(
+            f"<div style='padding:8px;border-radius:8px;background:{risk_color(f48.get('risk_status'))};color:white'>+48h Mold Risk Level: {f48.get('risk_status')}</div>",
+            unsafe_allow_html=True,
+        )
 
 st.caption(
     f"Updated: {format_updated_at(updated_at)} | Past number of Mold Risk days: {risk_days}"
