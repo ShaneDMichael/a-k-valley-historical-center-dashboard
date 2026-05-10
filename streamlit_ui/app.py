@@ -36,7 +36,7 @@ def risk_color(risk: str) -> str:
     if r in {"medium"}:
         return "#b45309"
     if r in {"low"}:
-        return "#facc15"
+        return "#0f766e"
     if r in {"no", "ok"}:
         return "#15803d"
     return "#334155"
@@ -210,9 +210,9 @@ if (f24_rh is None or f48_rh is None) and OPEN_METEO_LAT and OPEN_METEO_LON:
                 return None
             if current_rh_f is None:
                 return float(outdoor_max)
-            v = 0.8 * float(current_rh_f) + 0.2 * float(outdoor_max)
-            # Clamp to a conservative band around current conditions.
-            v = max(float(current_rh_f) - 5.0, min(float(current_rh_f) + 10.0, v))
+            v = 0.9 * float(current_rh_f) + 0.1 * float(outdoor_max)
+            # Clamp tightly around current conditions.
+            v = max(float(current_rh_f) - 5.0, min(float(current_rh_f) + 5.0, v))
             return float(max(0.0, min(100.0, v)))
 
         if f24_rh is None and om24 is not None:
@@ -246,19 +246,15 @@ with right:
             "Forecast Relative Humidity +24h" + (" (estimate)" if f24_is_estimate else ""),
             fmt_percent(f24_rh),
         )
+        st.markdown(
+            f"<div style='padding:8px;border-radius:8px;background:{risk_color(f24_risk)};color:white'>+24h Mold Risk Level: {f24_risk}</div>",
+            unsafe_allow_html=True,
+        )
     with fcol2:
         st.metric(
             "Forecast Relative Humidity +48h" + (" (estimate)" if f48_is_estimate else ""),
             fmt_percent(f48_rh),
         )
-
-    rcol1, rcol2 = st.columns(2)
-    with rcol1:
-        st.markdown(
-            f"<div style='padding:8px;border-radius:8px;background:{risk_color(f24_risk)};color:white'>+24h Mold Risk Level: {f24_risk}</div>",
-            unsafe_allow_html=True,
-        )
-    with rcol2:
         st.markdown(
             f"<div style='padding:8px;border-radius:8px;background:{risk_color(f48_risk)};color:white'>+48h Mold Risk Level: {f48_risk}</div>",
             unsafe_allow_html=True,
