@@ -99,11 +99,19 @@ def format_updated_at(value) -> str:
     if not value:
         return "—"
     tz = ZoneInfo("America/New_York")
+
+    def _fmt(dt: datetime) -> str:
+        # Windows-friendly: avoid %-d / %-I.
+        s = dt.strftime("%b %d, %Y %I:%M %p %Z")
+        # Strip leading zeros from day and hour.
+        s = s.replace(" 0", " ")
+        return s
+
     if isinstance(value, (int, float)):
         try:
             dt = datetime.fromtimestamp(float(value))
             dt = dt.replace(tzinfo=tz)
-            return dt.strftime("%b %-d, %Y %-I:%M %p %Z")
+            return _fmt(dt)
         except Exception:
             return str(value)
     if isinstance(value, str):
@@ -115,7 +123,7 @@ def format_updated_at(value) -> str:
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=tz)
             dt = dt.astimezone(tz)
-            return dt.strftime("%b %-d, %Y %-I:%M %p %Z")
+            return _fmt(dt)
         except Exception:
             return value
     return str(value)
@@ -178,11 +186,29 @@ if f48_rh is None:
 if (f24_rh is None or f48_rh is None) and OPEN_METEO_LAT and OPEN_METEO_LON:
     try:
         om24, om48 = fetch_open_meteo_rh_max(OPEN_METEO_LAT, OPEN_METEO_LON, OPEN_METEO_TZ)
+        current_rh = c.get("rh_max_percent")
+        try:
+            current_rh_f = float(current_rh) if current_rh is not None else None
+        except Exception:
+            current_rh_f = None
+
+        # Open-Meteo is OUTDOOR RH; use it only as a weak signal so we don't
+        # show unrealistic basement jumps while the database is still populating.
+        def _blend(outdoor_max: float | None) -> float | None:
+            if outdoor_max is None:
+                return None
+            if current_rh_f is None:
+                return float(outdoor_max)
+            v = 0.8 * float(current_rh_f) + 0.2 * float(outdoor_max)
+            # Clamp to a conservative band around current conditions.
+            v = max(float(current_rh_f) - 5.0, min(float(current_rh_f) + 10.0, v))
+            return float(max(0.0, min(100.0, v)))
+
         if f24_rh is None and om24 is not None:
-            f24_rh = om24
+            f24_rh = _blend(om24)
             f24_is_estimate = True
         if f48_rh is None and om48 is not None:
-            f48_rh = om48
+            f48_rh = _blend(om48)
             f48_is_estimate = True
     except Exception:
         pass
