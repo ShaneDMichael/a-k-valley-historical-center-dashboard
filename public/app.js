@@ -8,6 +8,7 @@ if (MODEL_FILE) {
   const help = document.getElementById('marker-help');
   if (help) help.style.display = 'block';
 }
+const STREAMLIT_FORECAST_URL = qs.get('moldForecastUrl') || 'https://a-k-valley-historical-center-dashboard-8ca6.onrender.com';
 const MODEL_URL = `/${MODEL_FILE}`;
 const POLL_MS = 10000;
 
@@ -203,6 +204,12 @@ function renderBasementForecast(report) {
 
 async function onBasementForecastClick() {
   if (!basementForecastBtn || !basementForecastPanel) return;
+
+  if (STREAMLIT_FORECAST_URL && STREAMLIT_FORECAST_URL.trim().length) {
+    window.open(STREAMLIT_FORECAST_URL, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
   basementForecastPanel.hidden = false;
   basementForecastPanel.textContent = 'Loading latest forecast…';
 
