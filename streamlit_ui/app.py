@@ -74,7 +74,7 @@ with bar_right:
         st.session_state["last_refresh"] = time.time()
         st.rerun()
 
-st.subheader("Forecast")
+st.subheader("Current")
 
 try:
     status = fetch_status()
@@ -104,8 +104,10 @@ if f48_rh is None:
 
 m1, m2, m3 = st.columns(3)
 m1.metric("Current Relative Humidity", c.get("rh_max_percent"))
-m2.metric("Forecast +24h", f24_rh)
-m3.metric("Forecast +48h", f48_rh)
+m2.metric("Forecast RH +24h", f24_rh)
+m3.metric("Forecast RH +48h", f48_rh)
+
+st.subheader("Forecast")
 
 r1, r2, r3 = st.columns(3)
 r1.markdown(
@@ -122,7 +124,7 @@ r3.markdown(
 )
 
 st.caption(
-    f"Updated: {format_updated_at(updated_at)} | Risk days: {risk_days} (days with predicted elevated mold risk in the near-term window)"
+    f"Updated: {format_updated_at(updated_at)} | Past number of Mold Risk days: {risk_days}"
 )
 
 
