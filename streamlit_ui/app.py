@@ -8,8 +8,11 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="AKV Basement Forecast", layout="wide")
 
-FORECAST_STATUS_URL = os.getenv("FORECAST_STATUS_URL", "http://localhost:8000/status")
-GLB_VIEWER_URL = os.getenv("GLB_VIEWER_URL", "http://localhost:5173/")
+FORECAST_STATUS_URL = os.getenv(
+    "FORECAST_STATUS_URL",
+    "https://a-k-valley-heritage-center-forecast.onrender.com/status",
+)
+GLB_VIEWER_URL = os.getenv("GLB_VIEWER_URL", "").strip()
 GLB_MODEL = os.getenv("GLB_MODEL", "Basement.glb")
 GLB_DEVICE_ID = os.getenv("GLB_DEVICE_ID", "")
 GLB_TITLE = os.getenv("GLB_TITLE", "Basement")
@@ -70,10 +73,23 @@ with col_left:
     f24 = status.get("forecast_24h") or {}
     f48 = status.get("forecast_48h") or {}
 
+    f24_rh = f24.get("rh_max_percent")
+    f48_rh = f48.get("rh_max_percent")
+    if f24_rh is None:
+        try:
+            f24_rh = (status.get("debug") or {}).get("pred_far_24_raw")
+        except Exception:
+            f24_rh = None
+    if f48_rh is None:
+        try:
+            f48_rh = (status.get("debug") or {}).get("pred_far_48_raw")
+        except Exception:
+            f48_rh = None
+
     m1, m2, m3 = st.columns(3)
     m1.metric("Current RH Max", c.get("rh_max_percent"))
-    m2.metric("Forecast +24h", f24.get("rh_max_percent"))
-    m3.metric("Forecast +48h", f48.get("rh_max_percent"))
+    m2.metric("Forecast +24h", f24_rh)
+    m3.metric("Forecast +48h", f48_rh)
 
     r1, r2, r3 = st.columns(3)
     r1.markdown(
@@ -103,6 +119,11 @@ with col_left:
 
 with col_right:
     st.subheader("3D Model")
+
+    if not GLB_VIEWER_URL:
+        st.info("Set GLB_VIEWER_URL in the Streamlit service environment to enable the embedded 3D viewer.")
+        st.stop()
+
     qs = []
     if GLB_MODEL:
         qs.append(f"model={requests.utils.quote(GLB_MODEL)}")
