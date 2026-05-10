@@ -145,7 +145,7 @@ st.markdown(
     "<style>"
     "h1{font-size:3rem !important;font-weight:800 !important;}"
     "h2{font-size:1.8rem !important;font-weight:800 !important;margin-top:0.25rem !important;}"
-    "div[data-testid='stMetricLabel']{font-size:1.2rem !important;font-weight:700 !important;}"
+    "div[data-testid='stMetricLabel']{font-size:1.35rem !important;font-weight:800 !important;}"
     "div[data-testid='stMetricValue']{font-size:2.6rem !important;font-weight:800 !important;}"
     "div[data-testid='stMetric']{padding:0.25rem 0 0.75rem 0 !important;}"
     "div[data-testid='stMarkdownContainer']{margin-top:0.25rem !important;margin-bottom:0.75rem !important;}"
@@ -267,9 +267,8 @@ with right:
             unsafe_allow_html=True,
         )
 
-st.caption(
-    f"Updated: {format_updated_at(updated_at)} | Past number of Mold Risk days: {risk_days}"
-)
+st.caption(f"Updated: {format_updated_at(updated_at)}")
+st.caption(f"Past number of Mold Risk days: {risk_days}")
 
 
 if REFRESH_SECONDS > 0:
