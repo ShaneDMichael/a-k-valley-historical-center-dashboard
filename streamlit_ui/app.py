@@ -142,7 +142,14 @@ st.title("A-K Valley Heritage Center")
 st.header("Basement Humidity and Mold Risk Forecast")
 
 st.markdown(
-    "<style>h1{font-size:3rem !important;}div[data-testid='stMetricLabel']{font-size:1.15rem !important;}div[data-testid='stMetricValue']{font-size:2.4rem !important;}</style>",
+    "<style>"
+    "h1{font-size:3rem !important;font-weight:800 !important;}"
+    "h2{font-size:1.8rem !important;font-weight:800 !important;margin-top:0.25rem !important;}"
+    "div[data-testid='stMetricLabel']{font-size:1.2rem !important;font-weight:700 !important;}"
+    "div[data-testid='stMetricValue']{font-size:2.6rem !important;font-weight:800 !important;}"
+    "div[data-testid='stMetric']{padding:0.25rem 0 0.75rem 0 !important;}"
+    "div[data-testid='stMarkdownContainer']{margin-top:0.25rem !important;margin-bottom:0.75rem !important;}"
+    "</style>",
     unsafe_allow_html=True,
 )
 
@@ -235,7 +242,7 @@ left, right = st.columns([1, 2])
 with left:
     st.metric("Current Relative Humidity", fmt_percent(c.get("rh_max_percent")))
     st.markdown(
-        f"<div style='padding:8px;border-radius:8px;background:{risk_color(c.get('risk_status'))};color:white'>Current Mold Risk Level: {c.get('risk_status')}</div>",
+        f"<div style='padding:10px;border-radius:10px;background:{risk_color(c.get('risk_status'))};color:white;font-weight:700'>Current Mold Risk Level: {c.get('risk_status')}</div>",
         unsafe_allow_html=True,
     )
 
@@ -247,7 +254,7 @@ with right:
             fmt_percent(f24_rh),
         )
         st.markdown(
-            f"<div style='padding:8px;border-radius:8px;background:{risk_color(f24_risk)};color:white'>+24h Mold Risk Level: {f24_risk}</div>",
+            f"<div style='padding:10px;border-radius:10px;background:{risk_color(f24_risk)};color:white;font-weight:700'>+24h Mold Risk Level: {f24_risk}</div>",
             unsafe_allow_html=True,
         )
     with fcol2:
@@ -256,7 +263,7 @@ with right:
             fmt_percent(f48_rh),
         )
         st.markdown(
-            f"<div style='padding:8px;border-radius:8px;background:{risk_color(f48_risk)};color:white'>+48h Mold Risk Level: {f48_risk}</div>",
+            f"<div style='padding:10px;border-radius:10px;background:{risk_color(f48_risk)};color:white;font-weight:700'>+48h Mold Risk Level: {f48_risk}</div>",
             unsafe_allow_html=True,
         )
 
