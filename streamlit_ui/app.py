@@ -1,6 +1,7 @@
 import os
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import requests
 import streamlit as st
@@ -38,10 +39,12 @@ def risk_color(risk: str) -> str:
 def format_updated_at(value) -> str:
     if not value:
         return "—"
+    tz = ZoneInfo("America/New_York")
     if isinstance(value, (int, float)):
         try:
             dt = datetime.fromtimestamp(float(value))
-            return dt.strftime("%b %-d, %Y %-I:%M %p")
+            dt = dt.replace(tzinfo=tz)
+            return dt.strftime("%b %-d, %Y %-I:%M %p %Z")
         except Exception:
             return str(value)
     if isinstance(value, str):
@@ -50,9 +53,10 @@ def format_updated_at(value) -> str:
             if s.endswith("Z"):
                 s = s[:-1] + "+00:00"
             dt = datetime.fromisoformat(s)
-            if dt.tzinfo is not None:
-                dt = dt.astimezone()
-            return dt.strftime("%b %-d, %Y %-I:%M %p")
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=tz)
+            dt = dt.astimezone(tz)
+            return dt.strftime("%b %-d, %Y %-I:%M %p %Z")
         except Exception:
             return value
     return str(value)
@@ -99,7 +103,7 @@ if f48_rh is None:
         f48_rh = None
 
 m1, m2, m3 = st.columns(3)
-m1.metric("Current RH Max", c.get("rh_max_percent"))
+m1.metric("Current Relative Humidity", c.get("rh_max_percent"))
 m2.metric("Forecast +24h", f24_rh)
 m3.metric("Forecast +48h", f48_rh)
 
@@ -117,7 +121,9 @@ r3.markdown(
     unsafe_allow_html=True,
 )
 
-st.caption(f"Updated: {format_updated_at(updated_at)} | Risk days: {risk_days}")
+st.caption(
+    f"Updated: {format_updated_at(updated_at)} | Risk days: {risk_days} (days with predicted elevated mold risk in the near-term window)"
+)
 
 
 if REFRESH_SECONDS > 0:
