@@ -326,6 +326,68 @@ def _fetch_history(start_ts: datetime, end_ts: datetime) -> pd.DataFrame:
     return df
 
 
+def _fetch_open_meteo_feature_history(start_ts: datetime, end_ts: datetime) -> pd.DataFrame:
+    start_ts = start_ts.replace(tzinfo=timezone.utc)
+    end_ts = end_ts.replace(tzinfo=timezone.utc)
+
+    with _db_connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                with latest_run as (
+                  select
+                    date_trunc('hour', run_ts) as run_hr,
+                    max(run_ts) as run_ts
+                  from weather_forecast_points
+                  where source='open_meteo'
+                    and run_ts >= %s
+                    and run_ts <= %s
+                  group by 1
+                )
+                select
+                  lr.run_hr as ts,
+                  w24.temp_f as open_meteo_temp_f_t_plus_24h,
+                  w24.rh_percent as open_meteo_rh_percent_t_plus_24h,
+                  w24.dew_point_f as open_meteo_dew_point_f_t_plus_24h,
+                  w48.temp_f as open_meteo_temp_f_t_plus_48h,
+                  w48.rh_percent as open_meteo_rh_percent_t_plus_48h,
+                  w48.dew_point_f as open_meteo_dew_point_f_t_plus_48h
+                from latest_run lr
+                left join weather_forecast_points w24
+                  on w24.run_ts = lr.run_ts
+                 and w24.source='open_meteo'
+                 and w24.target_ts = lr.run_hr + interval '24 hours'
+                left join weather_forecast_points w48
+                  on w48.run_ts = lr.run_ts
+                 and w48.source='open_meteo'
+                 and w48.target_ts = lr.run_hr + interval '48 hours'
+                order by lr.run_hr asc;
+                """,
+                (start_ts, end_ts),
+            )
+            rows = cur.fetchall() or []
+
+    if not rows:
+        return pd.DataFrame(
+            columns=[
+                "ts",
+                "open_meteo_temp_f_t_plus_24h",
+                "open_meteo_rh_percent_t_plus_24h",
+                "open_meteo_dew_point_f_t_plus_24h",
+                "open_meteo_temp_f_t_plus_48h",
+                "open_meteo_rh_percent_t_plus_48h",
+                "open_meteo_dew_point_f_t_plus_48h",
+            ]
+        )
+
+    df = pd.DataFrame(rows)
+    df["ts"] = pd.to_datetime(df["ts"], utc=True)
+    for c in df.columns:
+        if c != "ts":
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    return df
+
+
 def _count_risk_days() -> int:
     """Count distinct 'risk days' where max basement RH >= threshold.
 
@@ -367,7 +429,11 @@ def _build_feature_row(now_utc: datetime) -> Tuple[pd.DataFrame, Dict[str, Any]]
     start = now_utc - pd.Timedelta(hours=4)
 
     raw = _fetch_history(start, now_utc)
-    debug: Dict[str, Any] = {"history_rows": int(len(raw))}
+    open_meteo_raw = _fetch_open_meteo_feature_history(start, now_utc)
+    debug: Dict[str, Any] = {
+        "history_rows": int(len(raw)),
+        "open_meteo_history_rows": int(len(open_meteo_raw)),
+    }
     if raw.empty:
         return pd.DataFrame(), debug
 
@@ -443,6 +509,23 @@ def _build_feature_row(now_utc: datetime) -> Tuple[pd.DataFrame, Dict[str, Any]]
     df["outside_temp_f"] = out.reindex(idx)["temp_f"]
     df["outside_dew_point_f"] = out.reindex(idx)["dew_point_f"]
 
+    if not open_meteo_raw.empty:
+        om = open_meteo_raw.set_index("ts").sort_index()
+        om = om.resample("1min").ffill()
+        df["open_meteo_temp_f_t_plus_24h"] = om.reindex(idx)["open_meteo_temp_f_t_plus_24h"]
+        df["open_meteo_rh_percent_t_plus_24h"] = om.reindex(idx)["open_meteo_rh_percent_t_plus_24h"]
+        df["open_meteo_dew_point_f_t_plus_24h"] = om.reindex(idx)["open_meteo_dew_point_f_t_plus_24h"]
+        df["open_meteo_temp_f_t_plus_48h"] = om.reindex(idx)["open_meteo_temp_f_t_plus_48h"]
+        df["open_meteo_rh_percent_t_plus_48h"] = om.reindex(idx)["open_meteo_rh_percent_t_plus_48h"]
+        df["open_meteo_dew_point_f_t_plus_48h"] = om.reindex(idx)["open_meteo_dew_point_f_t_plus_48h"]
+    else:
+        df["open_meteo_temp_f_t_plus_24h"] = np.nan
+        df["open_meteo_rh_percent_t_plus_24h"] = np.nan
+        df["open_meteo_dew_point_f_t_plus_24h"] = np.nan
+        df["open_meteo_temp_f_t_plus_48h"] = np.nan
+        df["open_meteo_rh_percent_t_plus_48h"] = np.nan
+        df["open_meteo_dew_point_f_t_plus_48h"] = np.nan
+
     # Time features
     hour = df.index.hour
     df["sin_hour"] = np.sin(2 * np.pi * hour / 24.0)
@@ -472,6 +555,12 @@ def _build_feature_row(now_utc: datetime) -> Tuple[pd.DataFrame, Dict[str, Any]]
             "basement_rh_max_percent",
             "outside_temp_f",
             "outside_dew_point_f",
+            "open_meteo_temp_f_t_plus_24h",
+            "open_meteo_rh_percent_t_plus_24h",
+            "open_meteo_dew_point_f_t_plus_24h",
+            "open_meteo_temp_f_t_plus_48h",
+            "open_meteo_rh_percent_t_plus_48h",
+            "open_meteo_dew_point_f_t_plus_48h",
         ):
             df[f"{c}_lag_{h}h"] = df[c].shift(shift)
 
