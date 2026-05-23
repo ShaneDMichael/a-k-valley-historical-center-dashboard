@@ -73,9 +73,9 @@
     3
   ],
   "lag_minutes": [],
-  "trained_rows": 458,
+  "trained_rows": 649,
   "training_start": "2026-04-25 21:00:00+00:00",
-  "training_end": "2026-05-14 22:00:00+00:00",
+  "training_end": "2026-05-22 21:00:00+00:00",
   "input_csv": "/Users/shanemichael/Desktop/Stuff/JNH/AKV_Historical_Data/Input/akvh_training_from_pg.csv",
   "lin_model_path": "/Users/shanemichael/Desktop/Stuff/JNH/AKV_Historical_Data/Models/basement_rhmax_lin_24h.joblib",
   "rf_model_path": "/Users/shanemichael/Desktop/Stuff/JNH/AKV_Historical_Data/Models/basement_rhmax_rf_24h.joblib"
