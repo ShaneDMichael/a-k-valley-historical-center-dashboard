@@ -353,14 +353,26 @@ def _fetch_open_meteo_feature_history(start_ts: datetime, end_ts: datetime) -> p
                   w48.rh_percent as open_meteo_rh_percent_t_plus_48h,
                   w48.dew_point_f as open_meteo_dew_point_f_t_plus_48h
                 from latest_run lr
-                left join weather_forecast_points w24
-                  on w24.run_ts = lr.run_ts
-                 and w24.source='open_meteo'
-                 and w24.target_ts = lr.run_hr + interval '24 hours'
-                left join weather_forecast_points w48
-                  on w48.run_ts = lr.run_ts
-                 and w48.source='open_meteo'
-                 and w48.target_ts = lr.run_hr + interval '48 hours'
+                left join lateral (
+                  select temp_f, rh_percent, dew_point_f
+                  from weather_forecast_points
+                  where run_ts = lr.run_ts
+                    and source='open_meteo'
+                    and target_ts between (lr.run_hr + interval '24 hours' - interval '90 minutes')
+                                    and (lr.run_hr + interval '24 hours' + interval '90 minutes')
+                  order by abs(extract(epoch from (target_ts - (lr.run_hr + interval '24 hours'))))
+                  limit 1
+                ) w24 on true
+                left join lateral (
+                  select temp_f, rh_percent, dew_point_f
+                  from weather_forecast_points
+                  where run_ts = lr.run_ts
+                    and source='open_meteo'
+                    and target_ts between (lr.run_hr + interval '48 hours' - interval '90 minutes')
+                                    and (lr.run_hr + interval '48 hours' + interval '90 minutes')
+                  order by abs(extract(epoch from (target_ts - (lr.run_hr + interval '48 hours'))))
+                  limit 1
+                ) w48 on true
                 order by lr.run_hr asc;
                 """,
                 (start_ts, end_ts),
