@@ -7,7 +7,7 @@ import psycopg2.extras
 
 from zoneinfo import ZoneInfo
 
-from main import _db_connect, _ensure_tables
+from main import _db_connect
 
 
 LOCAL_TZ = os.getenv("LOCAL_TZ", "America/New_York")
@@ -245,7 +245,6 @@ def _write_optimizer_outputs(
 
 
 def main() -> None:
-    _ensure_tables()
     _ensure_optimizer_tables()
 
     tz = ZoneInfo(LOCAL_TZ)
