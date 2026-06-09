@@ -306,7 +306,14 @@ else:
     schedule_slots = opt.get("schedule_slots") or []
     rh_points = opt.get("predicted_rh_points") or []
 
-    channels = ["basement", "big_room_far", "big_room_near", "entrance", "upstairs"]
+    channel_labels = {
+        "basement": "Basement",
+        "big_room_far": "Big Room far side",
+        "big_room_near": "Big Room near side",
+        "entrance": "Entrance Room",
+        "upstairs": "Upstairs Office",
+    }
+    channels = list(channel_labels.keys())
 
     # Build a compact schedule grid: rows=channel, cols=hour start.
     slots_by_channel = {c: [] for c in channels}
@@ -333,7 +340,7 @@ else:
 
         for c in channels:
             row_cols = st.columns([2] + [1] * min(24, len(col_ts)))
-            row_cols[0].write(c)
+            row_cols[0].write(channel_labels.get(c, c))
             slots = slots_by_channel.get(c) or []
             for i, s in enumerate(slots[:24]):
                 row_cols[i + 1].write("ON" if s.get("is_on") else "OFF")
@@ -354,7 +361,7 @@ else:
             continue
         xs = [x.get("ts") for x in pts]
         ys = [x.get("rh_percent") for x in pts]
-        st.line_chart({c: ys})
+        st.line_chart({channel_labels.get(c, c): ys})
 
 
 if REFRESH_SECONDS > 0:

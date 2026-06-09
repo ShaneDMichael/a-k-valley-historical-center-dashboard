@@ -199,7 +199,7 @@ def optimizer_latest() -> Dict[str, Any]:
                     """
                     select run_id, run_ts, horizon_hours, solver, rh_target_percent, app_version, warnings, created_at
                     from optimizer_runs
-                    order by run_ts desc
+                    order by run_ts desc, created_at desc
                     limit 1;
                     """
                 )
