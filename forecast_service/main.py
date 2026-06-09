@@ -119,6 +119,8 @@ def _db_connect():
 
 
 def _ensure_tables() -> None:
+    ts = datetime.now(timezone.utc).isoformat()
+    print(f"[{ts}] ensure_tables_called app_version={APP_VERSION} file={__file__}", flush=True)
     with _db_connect() as conn:
         with conn.cursor() as cur:
             cur.execute(

@@ -13,6 +13,7 @@ from main import _db_connect
 LOCAL_TZ = os.getenv("LOCAL_TZ", "America/New_York")
 OPTIMIZER_HORIZON_HOURS = int(os.getenv("OPTIMIZER_HORIZON_HOURS", "24"))
 APP_VERSION = os.getenv("APP_VERSION", "dev")
+OPTIMIZER_BUILD_ID = os.getenv("OPTIMIZER_BUILD_ID", "2026-06-09a")
 
 
 def _heartbeat(msg: str) -> None:
@@ -245,6 +246,7 @@ def _write_optimizer_outputs(
 
 
 def main() -> None:
+    _heartbeat(f"optimizer_start build_id={OPTIMIZER_BUILD_ID} app_version={APP_VERSION} file={__file__}")
     _ensure_optimizer_tables()
 
     tz = ZoneInfo(LOCAL_TZ)
