@@ -13,6 +13,10 @@ FORECAST_STATUS_URL = os.getenv(
     "FORECAST_STATUS_URL",
     "https://a-k-valley-heritage-center-forecast.onrender.com/status",
 )
+FORECAST_OPTIMIZER_URL = os.getenv(
+    "FORECAST_OPTIMIZER_URL",
+    "https://a-k-valley-heritage-center-forecast.onrender.com/optimizer/latest",
+)
 OPEN_METEO_LAT = os.getenv("OPEN_METEO_LAT", "").strip()
 OPEN_METEO_LON = os.getenv("OPEN_METEO_LON", "").strip()
 OPEN_METEO_TZ = os.getenv("OPEN_METEO_TZ", "America/New_York").strip() or "America/New_York"
@@ -22,6 +26,15 @@ REFRESH_SECONDS = int(os.getenv("REFRESH_SECONDS", "60"))
 
 def fetch_status() -> dict:
     resp = requests.get(FORECAST_STATUS_URL, timeout=20)
+    resp.raise_for_status()
+    payload = resp.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Unexpected response")
+    return payload
+
+
+def fetch_optimizer_latest() -> dict:
+    resp = requests.get(FORECAST_OPTIMIZER_URL, timeout=20)
     resp.raise_for_status()
     payload = resp.json()
     if not isinstance(payload, dict):
@@ -269,6 +282,79 @@ with right:
 
 st.caption(f"Updated: {format_updated_at(updated_at)}")
 st.caption(f"Past number of Mold Risk days: {risk_days}")
+
+
+st.header("Dehumidifier Optimization (Daily Schedule)")
+try:
+    opt = fetch_optimizer_latest()
+except Exception as e:
+    st.error(f"Failed to load optimizer results: {e}")
+    opt = {"run": None, "schedule_slots": [], "predicted_rh_points": []}
+
+run = opt.get("run")
+if not run:
+    st.info("No optimizer runs found yet.")
+else:
+    st.caption(
+        "Latest optimizer run: "
+        f"{format_updated_at(run.get('run_ts'))} | solver={run.get('solver')} | "
+        f"target_rh={run.get('rh_target_percent')}"
+    )
+    if run.get("warnings"):
+        st.caption(f"Warnings: {run.get('warnings')}")
+
+    schedule_slots = opt.get("schedule_slots") or []
+    rh_points = opt.get("predicted_rh_points") or []
+
+    channels = ["basement", "big_room_far", "big_room_near", "entrance", "upstairs"]
+
+    # Build a compact schedule grid: rows=channel, cols=hour start.
+    slots_by_channel = {c: [] for c in channels}
+    for s in schedule_slots:
+        ch = s.get("channel_id")
+        if ch in slots_by_channel:
+            slots_by_channel[ch].append(s)
+
+    # Determine column labels from the first channel with slots.
+    col_ts = []
+    for c in channels:
+        if slots_by_channel.get(c):
+            col_ts = [x.get("slot_start_ts") for x in slots_by_channel[c]]
+            break
+
+    if col_ts:
+        # Create a simple table-like display using Streamlit columns.
+        st.subheader("Schedule (next 24 hours)")
+        header_cols = st.columns([2] + [1] * min(24, len(col_ts)))
+        header_cols[0].markdown("**Channel**")
+        for i, t in enumerate(col_ts[:24]):
+            # Show hour in local time
+            header_cols[i + 1].markdown(f"**{format_updated_at(t).split()[-3]}**")
+
+        for c in channels:
+            row_cols = st.columns([2] + [1] * min(24, len(col_ts)))
+            row_cols[0].write(c)
+            slots = slots_by_channel.get(c) or []
+            for i, s in enumerate(slots[:24]):
+                row_cols[i + 1].write("ON" if s.get("is_on") else "OFF")
+    else:
+        st.info("No schedule slots available yet.")
+
+    # Predicted RH points
+    st.subheader("Predicted RH (heuristic simulation)")
+    pts_by_series = {c: [] for c in channels}
+    for p in rh_points:
+        series = p.get("series")
+        if series in pts_by_series:
+            pts_by_series[series].append(p)
+
+    for c in channels:
+        pts = pts_by_series.get(c) or []
+        if not pts:
+            continue
+        xs = [x.get("ts") for x in pts]
+        ys = [x.get("rh_percent") for x in pts]
+        st.line_chart({c: ys})
 
 
 if REFRESH_SECONDS > 0:

@@ -190,6 +190,73 @@ def _ensure_tables() -> None:
         conn.commit()
 
 
+@app.get("/optimizer/latest")
+def optimizer_latest() -> Dict[str, Any]:
+    with _db_connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                select run_id, run_ts, horizon_hours, solver, rh_target_percent, app_version, warnings, created_at
+                from optimizer_runs
+                order by run_ts desc
+                limit 1;
+                """
+            )
+            run = cur.fetchone()
+
+            if not run:
+                return {"run": None, "schedule_slots": [], "predicted_rh_points": []}
+
+            run_id = run.get("run_id")
+            cur.execute(
+                """
+                select channel_id, slot_start_ts, slot_end_ts, is_on
+                from dehumidifier_schedule_slots
+                where run_id = %s
+                order by channel_id asc, slot_start_ts asc;
+                """,
+                (run_id,),
+            )
+            schedule_rows = cur.fetchall() or []
+
+            cur.execute(
+                """
+                select series, ts, rh_percent
+                from predicted_rh_points
+                where run_id = %s
+                order by series asc, ts asc;
+                """,
+                (run_id,),
+            )
+            rh_rows = cur.fetchall() or []
+
+    def _iso(v: Any) -> Any:
+        if isinstance(v, datetime):
+            return v.astimezone(timezone.utc).isoformat()
+        return v
+
+    run_out = {k: _iso(v) for k, v in dict(run).items()}
+    schedule_out = [
+        {
+            "channel_id": r.get("channel_id"),
+            "slot_start_ts": _iso(r.get("slot_start_ts")),
+            "slot_end_ts": _iso(r.get("slot_end_ts")),
+            "is_on": bool(r.get("is_on")),
+        }
+        for r in schedule_rows
+    ]
+    rh_out = [
+        {
+            "series": r.get("series"),
+            "ts": _iso(r.get("ts")),
+            "rh_percent": (None if r.get("rh_percent") is None else float(r.get("rh_percent"))),
+        }
+        for r in rh_rows
+    ]
+
+    return {"run": run_out, "schedule_slots": schedule_out, "predicted_rh_points": rh_out}
+
+
 def _insert_forecast_prediction(
     *, run_ts: datetime, horizon_hours: int, predicted: Optional[float], predicted_raw: Optional[float]
 ) -> None:

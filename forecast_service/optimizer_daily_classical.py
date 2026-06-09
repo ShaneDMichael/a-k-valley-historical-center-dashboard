@@ -328,21 +328,7 @@ def main() -> None:
     if latest_run is None:
         warnings.append("missing_open_meteo_run")
 
-    # Placeholder schedule + predictions (v0). We will replace this with the physics model + optimizer.
-    # For now, produce all-off schedule and carry current RH forward.
     start = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
-    schedule_rows: List[Tuple[str, datetime, datetime, bool]] = []
-    for h in range(horizon_hours):
-        slot_start = start + timedelta(hours=h)
-        slot_end = slot_start + timedelta(hours=1)
-        for channel_id in [
-            "basement",
-            "big_room_near",
-            "big_room_far",
-            "entrance",
-            "upstairs",
-        ]:
-            schedule_rows.append((channel_id, slot_start, slot_end, False))
 
     def _rh(role: str) -> Optional[float]:
         v = sensors.get(role, {}).get("rh_percent")
@@ -351,32 +337,89 @@ def main() -> None:
         except Exception:
             return None
 
-    basement_avg = None
     bfar = _rh("basement_far")
     bnear = _rh("basement_near")
-    if bfar is not None and bnear is not None:
-        basement_avg = 0.5 * (bfar + bnear)
-    elif bfar is not None:
-        basement_avg = bfar
-    elif bnear is not None:
-        basement_avg = bnear
 
     basement_max = None if (bfar is None and bnear is None) else max(v for v in [bfar, bnear] if v is not None)
 
+    channels = [
+        "basement",
+        "big_room_far",
+        "big_room_near",
+        "entrance",
+        "upstairs",
+    ]
+
+    initial_rh: Dict[str, Optional[float]] = {
+        "basement": basement_max,
+        "big_room_far": _rh("big_room_far"),
+        "big_room_near": _rh("big_room_near"),
+        "entrance": _rh("entrance"),
+        "upstairs": _rh("upstairs"),
+    }
+
+    # Heuristic v1 (manual execution): simple hourly on/off with hysteresis.
+    # We simulate RH with a crude drift model and choose ON when above target.
+    rh_target = float(rh_target)
+    hysteresis = 1.0
+    params = {
+        "basement": {"drift_off": 0.4, "delta_on": -1.5, "max_on_hours": 12},
+        "big_room_far": {"drift_off": 0.3, "delta_on": -1.2, "max_on_hours": 10},
+        "big_room_near": {"drift_off": 0.3, "delta_on": -1.2, "max_on_hours": 10},
+        "entrance": {"drift_off": 0.25, "delta_on": -1.0, "max_on_hours": 8},
+        "upstairs": {"drift_off": 0.25, "delta_on": -1.0, "max_on_hours": 8},
+    }
+
+    schedule_rows: List[Tuple[str, datetime, datetime, bool]] = []
     rh_rows: List[Tuple[str, datetime, Optional[float]]] = []
-    for h in range(horizon_hours + 1):
-        ts = start + timedelta(hours=h)
-        rh_rows.append(("basement", ts, basement_max))
-        rh_rows.append(("big_room_near", ts, _rh("big_room_near")))
-        rh_rows.append(("big_room_far", ts, _rh("big_room_far")))
-        rh_rows.append(("entrance", ts, _rh("entrance")))
-        rh_rows.append(("upstairs", ts, _rh("upstairs")))
+
+    for channel_id in channels:
+        rh = initial_rh.get(channel_id)
+        if rh is None:
+            warnings.append(f"missing_rh_for_channel:{channel_id}")
+
+        # Store initial point
+        rh_rows.append((channel_id, start, rh))
+
+        on_prev = False
+        on_hours = 0
+        p = params[channel_id]
+
+        for h in range(horizon_hours):
+            slot_start = start + timedelta(hours=h)
+            slot_end = slot_start + timedelta(hours=1)
+
+            if rh is None:
+                on = False
+            else:
+                if rh >= (rh_target + hysteresis):
+                    on = True
+                elif rh <= (rh_target - hysteresis):
+                    on = False
+                else:
+                    on = bool(on_prev)
+
+                if on and on_hours >= int(p["max_on_hours"]):
+                    on = False
+
+            schedule_rows.append((channel_id, slot_start, slot_end, bool(on)))
+
+            # Update simulated RH for next hour.
+            if rh is not None:
+                if on:
+                    rh = float(max(0.0, min(100.0, float(rh) + float(p["delta_on"]))))
+                    on_hours += 1
+                else:
+                    rh = float(max(0.0, min(100.0, float(rh) + float(p["drift_off"]))))
+
+            rh_rows.append((channel_id, slot_end, rh))
+            on_prev = bool(on)
 
     run_id = _write_optimizer_outputs(
         run_ts=run_ts,
         horizon_hours=horizon_hours,
         rh_target_percent=rh_target,
-        solver="placeholder_v0",
+        solver="heuristic_v1",
         warnings=";".join(warnings),
         schedule_rows=schedule_rows,
         rh_rows=rh_rows,
