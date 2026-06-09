@@ -1,8 +1,9 @@
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 import requests
 import streamlit as st
 
@@ -40,6 +41,20 @@ def fetch_optimizer_latest() -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Unexpected response")
     return payload
+
+
+def _opt_view() -> str:
+    v = st.query_params.get("view")
+    return str(v) if v is not None else ""
+
+
+def _go_opt() -> None:
+    st.query_params["view"] = "optimizer"
+
+
+def _go_main() -> None:
+    if "view" in st.query_params:
+        del st.query_params["view"]
 
 
 def risk_color(risk: str) -> str:
@@ -285,6 +300,12 @@ st.caption(f"Past number of Mold Risk days: {risk_days}")
 
 
 st.header("Dehumidifier Optimization (Daily Schedule)")
+
+if _opt_view() != "optimizer":
+    st.button("View optimization schedule", on_click=_go_opt)
+else:
+    st.button("Back to main dashboard", on_click=_go_main)
+
 try:
     opt = fetch_optimizer_latest()
 except Exception as e:
@@ -294,7 +315,7 @@ except Exception as e:
 run = opt.get("run")
 if not run:
     st.info("No optimizer runs found yet.")
-else:
+elif _opt_view() == "optimizer":
     st.caption(
         "Latest optimizer run: "
         f"{format_updated_at(run.get('run_ts'))} | solver={run.get('solver')} | "
@@ -330,12 +351,10 @@ else:
             break
 
     if col_ts:
-        # Create a simple table-like display using Streamlit columns.
         st.subheader("Schedule (next 24 hours)")
         header_cols = st.columns([2] + [1] * min(24, len(col_ts)))
         header_cols[0].markdown("**Channel**")
         for i, t in enumerate(col_ts[:24]):
-            # Show hour in local time
             header_cols[i + 1].markdown(f"**{format_updated_at(t).split()[-3]}**")
 
         for c in channels:
@@ -347,21 +366,45 @@ else:
     else:
         st.info("No schedule slots available yet.")
 
-    # Predicted RH points
-    st.subheader("Predicted RH (heuristic simulation)")
+    st.subheader("Predicted RH (when schedule is followed)")
+    st.caption("These curves are the optimizer’s predicted RH trajectory assuming the ON/OFF schedule is followed.")
+
+    try:
+        tz = ZoneInfo(OPEN_METEO_TZ)
+    except Exception:
+        tz = ZoneInfo("America/New_York")
+
     pts_by_series = {c: [] for c in channels}
     for p in rh_points:
         series = p.get("series")
         if series in pts_by_series:
             pts_by_series[series].append(p)
 
+    # Use datetime index so the x-axis renders as time (no 0.0, 1.0, ... decimals).
     for c in channels:
         pts = pts_by_series.get(c) or []
         if not pts:
             continue
-        xs = [x.get("ts") for x in pts]
-        ys = [x.get("rh_percent") for x in pts]
-        st.line_chart({channel_labels.get(c, c): ys})
+        times: List[datetime] = []
+        values: List[Optional[float]] = []
+        for item in pts:
+            ts_raw = item.get("ts")
+            if not ts_raw:
+                continue
+            try:
+                dt = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
+            except Exception:
+                continue
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            times.append(dt.astimezone(tz))
+            values.append(item.get("rh_percent"))
+
+        if not times:
+            continue
+
+        df = pd.DataFrame({channel_labels.get(c, c): values}, index=pd.DatetimeIndex(times))
+        st.line_chart(df)
 
 
 if REFRESH_SECONDS > 0:
