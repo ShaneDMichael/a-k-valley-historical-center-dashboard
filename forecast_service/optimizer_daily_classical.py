@@ -167,18 +167,55 @@ def _latest_sensor_values(now_utc: datetime) -> Dict[str, Dict[str, Optional[flo
     return out
 
 
-def _fetch_latest_open_meteo_run_ts(now_utc: datetime) -> Optional[datetime]:
-    start = now_utc - timedelta(days=2)
+def _weather_forecast_points_colnames() -> Dict[str, str]:
+    """Return canonical column name mapping for weather_forecast_points.
+
+    The project has existed in multiple schemas:
+    - v1: run_ts, target_ts, rh_percent
+    - v0/vlegacy: run_ts_utc, target_ts_utc, rh_pct
+    """
+
     with _db_connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                select max(run_ts)
+                select column_name
+                from information_schema.columns
+                where table_schema = 'public'
+                  and table_name = 'weather_forecast_points';
+                """
+            )
+            cols = {str(r[0]) for r in (cur.fetchall() or [])}
+
+    run_col = "run_ts" if "run_ts" in cols else "run_ts_utc"
+    target_col = "target_ts" if "target_ts" in cols else "target_ts_utc"
+    rh_col = "rh_percent" if "rh_percent" in cols else "rh_pct"
+    dp_col = "dew_point_f" if "dew_point_f" in cols else "dew_point_f"
+    temp_col = "temp_f" if "temp_f" in cols else "temp_f"
+
+    return {
+        "run_ts": run_col,
+        "target_ts": target_col,
+        "rh": rh_col,
+        "dew_point_f": dp_col,
+        "temp_f": temp_col,
+    }
+
+
+def _fetch_latest_open_meteo_run_ts(now_utc: datetime) -> Optional[datetime]:
+    start = now_utc - timedelta(days=2)
+    cols = _weather_forecast_points_colnames()
+    run_col = cols["run_ts"]
+    with _db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                select max({run_col})
                 from weather_forecast_points
                 where source='open_meteo'
-                  and run_ts >= %s
-                  and run_ts <= %s;
-                """,
+                  and {run_col} >= %s
+                  and {run_col} <= %s;
+                """ ,
                 (start, now_utc),
             )
             row = cur.fetchone()
@@ -186,16 +223,26 @@ def _fetch_latest_open_meteo_run_ts(now_utc: datetime) -> Optional[datetime]:
 
 
 def _fetch_forecast_points(run_ts: datetime, start_ts: datetime, end_ts: datetime) -> List[Dict[str, Any]]:
+    cols = _weather_forecast_points_colnames()
+    run_col = cols["run_ts"]
+    target_col = cols["target_ts"]
+    rh_col = cols["rh"]
+    temp_col = cols["temp_f"]
+    dp_col = cols["dew_point_f"]
     with _db_connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                """
-                select target_ts, temp_f, rh_percent, dew_point_f
+                f"""
+                select
+                  {target_col} as target_ts,
+                  {temp_col} as temp_f,
+                  {rh_col} as rh_percent,
+                  {dp_col} as dew_point_f
                 from weather_forecast_points
-                where run_ts=%s and source='open_meteo'
-                  and target_ts >= %s and target_ts < %s
-                order by target_ts asc;
-                """,
+                where {run_col}=%s and source='open_meteo'
+                  and {target_col} >= %s and {target_col} < %s
+                order by {target_col} asc;
+                """ ,
                 (run_ts, start_ts, end_ts),
             )
             return cur.fetchall() or []
