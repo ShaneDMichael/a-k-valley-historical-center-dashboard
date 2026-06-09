@@ -192,43 +192,47 @@ def _ensure_tables() -> None:
 
 @app.get("/optimizer/latest")
 def optimizer_latest() -> Dict[str, Any]:
-    with _db_connect() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                """
-                select run_id, run_ts, horizon_hours, solver, rh_target_percent, app_version, warnings, created_at
-                from optimizer_runs
-                order by run_ts desc
-                limit 1;
-                """
-            )
-            run = cur.fetchone()
+    try:
+        with _db_connect() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    select run_id, run_ts, horizon_hours, solver, rh_target_percent, app_version, warnings, created_at
+                    from optimizer_runs
+                    order by run_ts desc
+                    limit 1;
+                    """
+                )
+                run = cur.fetchone()
 
-            if not run:
-                return {"run": None, "schedule_slots": [], "predicted_rh_points": []}
+                if not run:
+                    return {"run": None, "schedule_slots": [], "predicted_rh_points": []}
 
-            run_id = run.get("run_id")
-            cur.execute(
-                """
-                select channel_id, slot_start_ts, slot_end_ts, is_on
-                from dehumidifier_schedule_slots
-                where run_id = %s
-                order by channel_id asc, slot_start_ts asc;
-                """,
-                (run_id,),
-            )
-            schedule_rows = cur.fetchall() or []
+                run_id = run.get("run_id")
+                cur.execute(
+                    """
+                    select channel_id, slot_start_ts, slot_end_ts, is_on
+                    from dehumidifier_schedule_slots
+                    where run_id = %s
+                    order by channel_id asc, slot_start_ts asc;
+                    """,
+                    (run_id,),
+                )
+                schedule_rows = cur.fetchall() or []
 
-            cur.execute(
-                """
-                select series, ts, rh_percent
-                from predicted_rh_points
-                where run_id = %s
-                order by series asc, ts asc;
-                """,
-                (run_id,),
-            )
-            rh_rows = cur.fetchall() or []
+                cur.execute(
+                    """
+                    select series, ts, rh_percent
+                    from predicted_rh_points
+                    where run_id = %s
+                    order by series asc, ts asc;
+                    """,
+                    (run_id,),
+                )
+                rh_rows = cur.fetchall() or []
+    except psycopg2.errors.UndefinedTable:
+        # Optimizer has not run yet (or tables not created). Do not fail the dashboard.
+        return {"run": None, "schedule_slots": [], "predicted_rh_points": []}
 
     def _iso(v: Any) -> Any:
         if isinstance(v, datetime):
