@@ -595,7 +595,7 @@ def _risk_from_rh(rh: Optional[float]) -> str:
         return "unknown"
     v = float(rh)
     if v < 50.0:
-        return "no"
+        return "none"
     if v <= 60.0:
         return "low"
     if v <= 65.0:
