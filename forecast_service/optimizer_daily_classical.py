@@ -1,4 +1,5 @@
 import os
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -49,7 +50,7 @@ def _ensure_optimizer_tables() -> None:
             cur.execute(
                 """
                 create table if not exists optimizer_runs (
-                  run_id uuid primary key default gen_random_uuid(),
+                  run_id uuid primary key,
                   run_ts timestamptz not null,
                   horizon_hours int not null,
                   solver text not null,
@@ -258,17 +259,24 @@ def _write_optimizer_outputs(
     schedule_rows: List[Tuple[str, datetime, datetime, bool]],
     rh_rows: List[Tuple[str, datetime, Optional[float]]],
 ) -> str:
+    run_id = uuid.uuid4()
     with _db_connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                insert into optimizer_runs (run_ts, horizon_hours, solver, rh_target_percent, app_version, warnings)
-                values (%s, %s, %s, %s, %s, %s)
-                returning run_id;
+                insert into optimizer_runs (run_id, run_ts, horizon_hours, solver, rh_target_percent, app_version, warnings)
+                values (%s, %s, %s, %s, %s, %s, %s);
                 """,
-                (run_ts, int(horizon_hours), str(solver), float(rh_target_percent), str(APP_VERSION), str(warnings)),
+                (
+                    run_id,
+                    run_ts,
+                    int(horizon_hours),
+                    str(solver),
+                    float(rh_target_percent),
+                    str(APP_VERSION),
+                    str(warnings),
+                ),
             )
-            run_id = cur.fetchone()[0]
 
             psycopg2.extras.execute_values(
                 cur,
