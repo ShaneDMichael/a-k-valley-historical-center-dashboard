@@ -204,6 +204,14 @@ c = status.get("current") or {}
 f24 = status.get("forecast_24h") or {}
 f48 = status.get("forecast_48h") or {}
 
+current_rh = c.get("rh_max_percent")
+current_risk = c.get("risk_status")
+if not current_risk or str(current_risk).lower() == "unknown":
+    try:
+        current_risk = risk_from_rh(None if current_rh is None else float(current_rh))
+    except Exception:
+        current_risk = "unknown"
+
 def fmt_percent(v):
     if v is None:
         return "—"
@@ -233,7 +241,6 @@ if f48_rh is None:
 if (f24_rh is None or f48_rh is None) and OPEN_METEO_LAT and OPEN_METEO_LON:
     try:
         om24, om48 = fetch_open_meteo_rh_max(OPEN_METEO_LAT, OPEN_METEO_LON, OPEN_METEO_TZ)
-        current_rh = c.get("rh_max_percent")
         try:
             current_rh_f = float(current_rh) if current_rh is not None else None
         except Exception:
@@ -271,7 +278,7 @@ left, right = st.columns([1, 2])
 with left:
     st.metric("Current Relative Humidity", fmt_percent(c.get("rh_max_percent")))
     st.markdown(
-        f"<div style='padding:10px;border-radius:10px;background:{risk_color(c.get('risk_status'))};color:white;font-weight:700'>Current Mold Risk Level: {c.get('risk_status')}</div>",
+        f"<div style='padding:10px;border-radius:10px;background:{risk_color(current_risk)};color:white;font-weight:700'>Current Mold Risk Level: {current_risk}</div>",
         unsafe_allow_html=True,
     )
 
@@ -386,6 +393,7 @@ elif _opt_view() == "optimizer":
         pts = pts_by_series.get(c) or []
         if not pts:
             continue
+        st.markdown(f"**{channel_labels.get(c, c)}**")
         times: List[datetime] = []
         values: List[Optional[float]] = []
         for item in pts:

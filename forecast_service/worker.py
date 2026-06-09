@@ -6,6 +6,8 @@ from typing import Any, Dict, Optional
 import psycopg2
 import requests
 
+from zoneinfo import ZoneInfo
+
 from main import (
     SWITCHBOT_BASEMENT_FAR_DEVICE_ID,
     SWITCHBOT_BASEMENT_NEAR_DEVICE_ID,
@@ -139,6 +141,7 @@ def _refresh_open_meteo_hourly() -> Dict[str, Any]:
         return {"inserted": 0}
 
     run_ts_utc = datetime.now(timezone.utc)
+    tz = ZoneInfo(str(OPEN_METEO_TZ or "UTC"))
     inserted = 0
     inserted_points = 0
     from main import _db_connect
@@ -149,6 +152,8 @@ def _refresh_open_meteo_hourly() -> Dict[str, Any]:
                 # Open-Meteo returns local-time strings; we store as UTC.
                 t_local = times[i]
                 ts = datetime.fromisoformat(t_local)
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=tz)
                 ts_utc = ts.astimezone(timezone.utc)
 
                 temp_f = _f_from_c(_safe_float(temps_c[i]))
