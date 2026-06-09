@@ -11,6 +11,9 @@ from zoneinfo import ZoneInfo
 from main import _db_connect
 
 
+psycopg2.extras.register_uuid()
+
+
 LOCAL_TZ = os.getenv("LOCAL_TZ", "America/New_York")
 OPTIMIZER_HORIZON_HOURS = int(os.getenv("OPTIMIZER_HORIZON_HOURS", "24"))
 APP_VERSION = os.getenv("APP_VERSION", "dev")
@@ -260,6 +263,7 @@ def _write_optimizer_outputs(
     rh_rows: List[Tuple[str, datetime, Optional[float]]],
 ) -> str:
     run_id = uuid.uuid4()
+    run_id_s = str(run_id)
     with _db_connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -268,7 +272,7 @@ def _write_optimizer_outputs(
                 values (%s, %s, %s, %s, %s, %s, %s);
                 """,
                 (
-                    run_id,
+                    run_id_s,
                     run_ts,
                     int(horizon_hours),
                     str(solver),
@@ -284,7 +288,7 @@ def _write_optimizer_outputs(
                 insert into dehumidifier_schedule_slots (run_id, channel_id, slot_start_ts, slot_end_ts, is_on)
                 values %s;
                 """,
-                [(run_id, dg, s, e, bool(on)) for (dg, s, e, on) in schedule_rows],
+                [(run_id_s, dg, s, e, bool(on)) for (dg, s, e, on) in schedule_rows],
             )
 
             psycopg2.extras.execute_values(
@@ -293,11 +297,11 @@ def _write_optimizer_outputs(
                 insert into predicted_rh_points (run_id, series, ts, rh_percent)
                 values %s;
                 """,
-                [(run_id, series, ts, (None if rh is None else float(rh))) for (series, ts, rh) in rh_rows],
+                [(run_id_s, series, ts, (None if rh is None else float(rh))) for (series, ts, rh) in rh_rows],
             )
         conn.commit()
 
-    return str(run_id)
+    return run_id_s
 
 
 def main() -> None:
