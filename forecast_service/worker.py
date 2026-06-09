@@ -25,6 +25,7 @@ from main import (
 
 POLL_SECONDS = int(os.getenv("WORKER_POLL_SECONDS", "60"))
 WEATHER_POLL_SECONDS = int(os.getenv("WEATHER_POLL_SECONDS", "900"))
+WEATHER_BACKOFF_429_SECONDS = int(os.getenv("WEATHER_BACKOFF_429_SECONDS", "3600"))
 OPEN_METEO_LAT = float(os.getenv("OPEN_METEO_LAT", "40.602722"))
 OPEN_METEO_LON = float(os.getenv("OPEN_METEO_LON", "-79.75420"))
 OPEN_METEO_TZ = os.getenv("OPEN_METEO_TZ", "America/New_York")
@@ -50,6 +51,28 @@ def _f_from_c(c: Optional[float]) -> Optional[float]:
     if c is None:
         return None
     return float(c) * 9.0 / 5.0 + 32.0
+
+
+def _seconds_until_next_weather_after_error(e: Exception) -> Optional[int]:
+    http_err = e if isinstance(e, requests.HTTPError) else None
+    if http_err is not None and getattr(http_err, "response", None) is not None:
+        try:
+            status = int(http_err.response.status_code)
+        except Exception:
+            status = None
+        if status == 429:
+            retry_after = None
+            try:
+                retry_after_header = http_err.response.headers.get("Retry-After")
+                if retry_after_header:
+                    retry_after = int(float(str(retry_after_header).strip()))
+            except Exception:
+                retry_after = None
+            return int(retry_after) if retry_after is not None and retry_after > 0 else int(WEATHER_BACKOFF_429_SECONDS)
+    msg = str(e)
+    if " 429 " in msg or "Too Many Requests" in msg:
+        return int(WEATHER_BACKOFF_429_SECONDS)
+    return None
 
 
 def _insert_weather_forecast(ts_utc: datetime, temp_f: Optional[float], rh: Optional[float], dew_point_f: Optional[float]) -> None:
@@ -251,7 +274,10 @@ def main() -> None:
     if missing:
         raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
 
-    _heartbeat(f"worker_start poll_seconds={POLL_SECONDS}")
+    _heartbeat(
+        f"worker_start poll_seconds={POLL_SECONDS} weather_poll_seconds={WEATHER_POLL_SECONDS} "
+        f"weather_backoff_429_seconds={WEATHER_BACKOFF_429_SECONDS}"
+    )
 
     next_weather = time.time()
 
@@ -272,8 +298,15 @@ def main() -> None:
                     f"open_meteo_ok inserted={info.get('inserted')} inserted_points={info.get('inserted_points')}"
                 )
             except Exception as e:
-                _heartbeat(f"open_meteo_failed: {e}")
-            next_weather = now_s + WEATHER_POLL_SECONDS
+                backoff = _seconds_until_next_weather_after_error(e)
+                if backoff is not None and backoff > 0:
+                    _heartbeat(f"open_meteo_failed: {e} backoff_seconds={backoff}")
+                    next_weather = now_s + float(backoff)
+                else:
+                    _heartbeat(f"open_meteo_failed: {e}")
+                    next_weather = now_s + WEATHER_POLL_SECONDS
+            else:
+                next_weather = now_s + WEATHER_POLL_SECONDS
 
         time.sleep(POLL_SECONDS)
 
