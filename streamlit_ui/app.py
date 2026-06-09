@@ -37,7 +37,7 @@ def risk_color(risk: str) -> str:
         return "#b45309"
     if r in {"low"}:
         return "#0f766e"
-    if r in {"no", "ok"}:
+    if r in {"none", "ok"}:
         return "#15803d"
     return "#334155"
 
@@ -48,7 +48,7 @@ def risk_from_rh(rh: float | None) -> str:
     try:
         v = float(rh)
         if v < 50.0:
-            return "no"
+            return "none"
         if v <= 60.0:
             return "low"
         if v <= 65.0:
