@@ -806,6 +806,7 @@ def status() -> Dict[str, Any]:
             "current": {"rh_max_percent": None, "risk_status": "unknown"},
             "forecast_24h": {"rh_max_percent": None, "risk_status": "unknown"},
             "forecast_48h": {"rh_max_percent": None, "risk_status": "unknown"},
+            "open_meteo_db": {"latest_run_ts_utc": None, "latest_target_ts_utc": None, "points_last_48h": None},
             "warnings": [f"missing_env:{','.join(missing_env)}"],
         }
 
@@ -817,6 +818,41 @@ def status() -> Dict[str, Any]:
 
     now = datetime.now(timezone.utc)
     now_min = _round_to_minute(now)
+
+    open_meteo_db: Dict[str, Any] = {
+        "latest_run_ts_utc": None,
+        "latest_target_ts_utc": None,
+        "points_last_48h": None,
+    }
+    try:
+        cols = _weather_forecast_points_colnames()
+        run_col = cols["run_ts"]
+        target_col = cols["target_ts"]
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    select
+                      max({run_col}) as latest_run,
+                      max({target_col}) as latest_target,
+                      count(*) filter (where {run_col} >= (now() - interval '48 hours')) as points_last_48h
+                    from weather_forecast_points
+                    where source in ('open_meteo', 'open-meteo');
+                    """
+                )
+                row = cur.fetchone() or (None, None, None)
+        latest_run, latest_target, points_last_48h = row
+        if isinstance(latest_run, datetime):
+            open_meteo_db["latest_run_ts_utc"] = latest_run.astimezone(timezone.utc).isoformat()
+        if isinstance(latest_target, datetime):
+            open_meteo_db["latest_target_ts_utc"] = latest_target.astimezone(timezone.utc).isoformat()
+        if points_last_48h is not None:
+            try:
+                open_meteo_db["points_last_48h"] = int(points_last_48h)
+            except Exception:
+                open_meteo_db["points_last_48h"] = None
+    except Exception as e:
+        warnings.append(f"open_meteo_db_check_failed:{str(e)}")
 
     # Fetch live sensor readings.
     far = fetch_switchbot_device_status(
@@ -1040,6 +1076,7 @@ def status() -> Dict[str, Any]:
         "risk_days": risk_days,
         "model_used_24h": bool(model_used_24h),
         "model_used_48h": bool(model_used_48h),
+        "open_meteo_db": open_meteo_db,
         "current": {
             "rh_max_percent": round(current_rh_max, 1) if current_rh_max is not None else None,
             "risk_status": _risk_from_rh(current_rh_max),
