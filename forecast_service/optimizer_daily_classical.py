@@ -216,7 +216,7 @@ def _fetch_latest_open_meteo_run_ts(now_utc: datetime) -> Optional[datetime]:
                 f"""
                 select max({run_col})
                 from weather_forecast_points
-                where source='open_meteo'
+                where source in ('open_meteo', 'open-meteo')
                   and {run_col} >= %s
                   and {run_col} <= %s;
                 """ ,
@@ -243,7 +243,7 @@ def _fetch_forecast_points(run_ts: datetime, start_ts: datetime, end_ts: datetim
                   {rh_col} as rh_percent,
                   {dp_col} as dew_point_f
                 from weather_forecast_points
-                where {run_col}=%s and source='open_meteo'
+                where {run_col}=%s and source in ('open_meteo', 'open-meteo')
                   and {target_col} >= %s and {target_col} < %s
                 order by {target_col} asc;
                 """ ,

@@ -434,7 +434,7 @@ def _fetch_open_meteo_feature_history(start_ts: datetime, end_ts: datetime) -> p
                     date_trunc('hour', run_ts) as run_hr,
                     max(run_ts) as run_ts
                   from weather_forecast_points
-                  where source='open_meteo'
+                  where source in ('open_meteo', 'open-meteo')
                     and run_ts >= %s
                     and run_ts <= %s
                   group by 1
@@ -452,7 +452,7 @@ def _fetch_open_meteo_feature_history(start_ts: datetime, end_ts: datetime) -> p
                   select temp_f, rh_percent, dew_point_f
                   from weather_forecast_points
                   where run_ts = lr.run_ts
-                    and source='open_meteo'
+                    and source in ('open_meteo', 'open-meteo')
                     and target_ts between (lr.run_hr + interval '24 hours' - interval '90 minutes')
                                     and (lr.run_hr + interval '24 hours' + interval '90 minutes')
                   order by abs(extract(epoch from (target_ts - (lr.run_hr + interval '24 hours'))))
@@ -462,7 +462,7 @@ def _fetch_open_meteo_feature_history(start_ts: datetime, end_ts: datetime) -> p
                   select temp_f, rh_percent, dew_point_f
                   from weather_forecast_points
                   where run_ts = lr.run_ts
-                    and source='open_meteo'
+                    and source in ('open_meteo', 'open-meteo')
                     and target_ts between (lr.run_hr + interval '48 hours' - interval '90 minutes')
                                     and (lr.run_hr + interval '48 hours' + interval '90 minutes')
                   order by abs(extract(epoch from (target_ts - (lr.run_hr + interval '48 hours'))))
