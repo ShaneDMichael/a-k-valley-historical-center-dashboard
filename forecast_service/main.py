@@ -1,6 +1,8 @@
 import os
 import time
 import math
+import csv
+import io
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -11,7 +13,7 @@ import pandas as pd
 import psycopg2
 import psycopg2.extras
 import requests
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 
 
 APP_VERSION = "0.1.2"
@@ -281,6 +283,60 @@ def optimizer_latest() -> Dict[str, Any]:
     ]
 
     return {"run": run_out, "schedule_slots": schedule_out, "predicted_rh_points": rh_out}
+
+
+@app.get("/optimizer/execution_logs.csv")
+def optimizer_execution_logs_csv() -> Response:
+    try:
+        with _db_connect() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    select
+                      optimizer_process,
+                      processor_type,
+                      runtime_seconds,
+                      app_version,
+                      optimizer_build_id,
+                      created_at
+                    from optimizer_execution_logs
+                    order by created_at desc
+                    limit 5000;
+                    """
+                )
+                rows = cur.fetchall() or []
+    except Exception as e:
+        body = f"error,{str(e).replace(chr(10), ' ').replace(chr(13), ' ')}\n"
+        return Response(content=body, media_type="text/csv", status_code=500)
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(
+        [
+            "optimizer_process",
+            "processor_type",
+            "runtime_seconds",
+            "app_version",
+            "optimizer_build_id",
+            "created_at",
+        ]
+    )
+    for r in rows:
+        created_at = r.get("created_at")
+        if isinstance(created_at, datetime):
+            created_at = created_at.astimezone(timezone.utc).isoformat()
+        w.writerow(
+            [
+                r.get("optimizer_process"),
+                r.get("processor_type"),
+                r.get("runtime_seconds"),
+                r.get("app_version"),
+                r.get("optimizer_build_id"),
+                created_at,
+            ]
+        )
+
+    return Response(content=buf.getvalue(), media_type="text/csv")
 
 
 def _insert_forecast_prediction(

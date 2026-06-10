@@ -1,4 +1,5 @@
 import os
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -18,6 +19,7 @@ LOCAL_TZ = os.getenv("LOCAL_TZ", "America/New_York")
 OPTIMIZER_HORIZON_HOURS = int(os.getenv("OPTIMIZER_HORIZON_HOURS", "24"))
 APP_VERSION = os.getenv("APP_VERSION", "dev")
 OPTIMIZER_BUILD_ID = os.getenv("OPTIMIZER_BUILD_ID", "2026-06-09a")
+OPTIMIZER_PROCESSOR_TYPE = os.getenv("OPTIMIZER_PROCESSOR_TYPE", "cpu")
 
 
 def _heartbeat(msg: str) -> None:
@@ -132,6 +134,60 @@ def _ensure_optimizer_tables() -> None:
                 """
             )
         conn.commit()
+
+
+def _ensure_optimizer_execution_log_table() -> None:
+    with _db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                create table if not exists optimizer_execution_logs (
+                  execution_id uuid primary key,
+                  optimizer_process text not null,
+                  processor_type text not null,
+                  runtime_seconds double precision,
+                  app_version text,
+                  optimizer_build_id text,
+                  created_at timestamptz not null default now()
+                );
+                """
+            )
+        conn.commit()
+
+
+def _log_optimizer_execution(*, optimizer_process: str, processor_type: str, runtime_seconds: Optional[float]) -> None:
+    try:
+        _ensure_optimizer_execution_log_table()
+    except Exception:
+        return
+
+    try:
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into optimizer_execution_logs (
+                      execution_id,
+                      optimizer_process,
+                      processor_type,
+                      runtime_seconds,
+                      app_version,
+                      optimizer_build_id
+                    )
+                    values (%s, %s, %s, %s, %s, %s);
+                    """,
+                    (
+                        str(uuid.uuid4()),
+                        str(optimizer_process),
+                        str(processor_type),
+                        (None if runtime_seconds is None else float(runtime_seconds)),
+                        str(APP_VERSION),
+                        str(OPTIMIZER_BUILD_ID),
+                    ),
+                )
+            conn.commit()
+    except Exception:
+        return
 
 
 def _latest_sensor_values(now_utc: datetime) -> Dict[str, Dict[str, Optional[float]]]:
@@ -305,6 +361,7 @@ def _write_optimizer_outputs(
 
 
 def main() -> None:
+    t0 = time.perf_counter()
     _heartbeat(f"optimizer_start build_id={OPTIMIZER_BUILD_ID} app_version={APP_VERSION} file={__file__}")
     _ensure_optimizer_tables()
 
@@ -437,7 +494,17 @@ def main() -> None:
         rh_rows=rh_rows,
     )
 
-    _heartbeat(f"optimizer_run_ok run_id={run_id} horizon_hours={horizon_hours} warnings={';'.join(warnings)}")
+    elapsed = time.perf_counter() - t0
+    _log_optimizer_execution(
+        optimizer_process="optimizer_daily_classical.py",
+        processor_type=OPTIMIZER_PROCESSOR_TYPE,
+        runtime_seconds=elapsed,
+    )
+
+    _heartbeat(
+        f"optimizer_run_ok run_id={run_id} horizon_hours={horizon_hours} "
+        f"runtime_seconds={elapsed:.3f} warnings={';'.join(warnings)}"
+    )
 
 
 if __name__ == "__main__":
