@@ -4,7 +4,9 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 import pandas as pd
 import requests
 import streamlit as st
@@ -333,6 +335,16 @@ elif _opt_view() == "optimizer":
     if run.get("warnings"):
         st.caption(f"Warnings: {run.get('warnings')}")
 
+    if OPEN_METEO_LAT and OPEN_METEO_LON:
+        try:
+            om24, om48 = fetch_open_meteo_rh_max(OPEN_METEO_LAT, OPEN_METEO_LON, OPEN_METEO_TZ)
+            if om24 is None and om48 is None:
+                st.caption("Open-Meteo check: reachable, but no RH values returned.")
+            else:
+                st.caption(f"Open-Meteo check: OK (max RH next 24h={om24}, next 48h={om48}).")
+        except Exception as e:
+            st.caption(f"Open-Meteo check: failed ({e}).")
+
     schedule_slots = opt.get("schedule_slots") or []
     rh_points = opt.get("predicted_rh_points") or []
 
@@ -483,11 +495,11 @@ elif _opt_view() == "optimizer":
 
         df = pd.DataFrame({channel_labels.get(c, c): values}, index=pd.DatetimeIndex(idx)).sort_index()
         fig, ax = plt.subplots(figsize=(10, 2.5))
-        ax.axhspan(0, 50, facecolor="#15803d", alpha=0.22, zorder=0)
-        ax.axhspan(50, 60, facecolor="#0f766e", alpha=0.22, zorder=0)
-        ax.axhspan(60, 65, facecolor="#b45309", alpha=0.22, zorder=0)
-        ax.axhspan(65, 100, facecolor="#b91c1c", alpha=0.22, zorder=0)
-        ax.axhline(target_rh, color="#111827", linewidth=1.5, alpha=0.9)
+        ax.axhspan(0, 50, facecolor="#15803d", alpha=0.28, zorder=0)
+        ax.axhspan(50, 60, facecolor="#0f766e", alpha=0.28, zorder=0)
+        ax.axhspan(60, 65, facecolor="#b45309", alpha=0.28, zorder=0)
+        ax.axhspan(65, 100, facecolor="#b91c1c", alpha=0.28, zorder=0)
+        ax.axhline(target_rh, color="#111827", linewidth=1.0, alpha=0.45)
         ax.plot(df.index, df.iloc[:, 0], linewidth=2)
         ax.set_ylabel("RH %")
         ax.set_xlabel("")
@@ -496,6 +508,17 @@ elif _opt_view() == "optimizer":
             ax.set_xlim(df.index.min(), df.index.max())
         except Exception:
             pass
+
+        def _fmt_tick(x, _pos):
+            try:
+                dt = mdates.num2date(x)
+                s = dt.strftime("%b %d %I%p")
+                s = s.replace(" 0", " ").lower()
+                return s
+            except Exception:
+                return ""
+
+        ax.xaxis.set_major_formatter(FuncFormatter(_fmt_tick))
         ax.grid(True, alpha=0.25)
         fig.autofmt_xdate(rotation=0, ha="center")
         st.pyplot(fig, clear_figure=True)
