@@ -435,6 +435,11 @@ elif _opt_view() == "optimizer":
         if series in pts_by_series:
             pts_by_series[series].append(p)
 
+    try:
+        target_rh = float(run.get("rh_target_percent") or 55.0)
+    except Exception:
+        target_rh = 55.0
+
     # Use datetime index so the x-axis renders as time (no 0.0, 1.0, ... decimals).
     for c in channels:
         pts = pts_by_series.get(c) or []
@@ -478,10 +483,11 @@ elif _opt_view() == "optimizer":
 
         df = pd.DataFrame({channel_labels.get(c, c): values}, index=pd.DatetimeIndex(idx)).sort_index()
         fig, ax = plt.subplots(figsize=(10, 2.5))
-        ax.axhspan(0, 50, facecolor="#15803d", alpha=0.10, zorder=0)
-        ax.axhspan(50, 60, facecolor="#0f766e", alpha=0.10, zorder=0)
-        ax.axhspan(60, 65, facecolor="#b45309", alpha=0.10, zorder=0)
-        ax.axhspan(65, 100, facecolor="#b91c1c", alpha=0.10, zorder=0)
+        ax.axhspan(0, 50, facecolor="#15803d", alpha=0.22, zorder=0)
+        ax.axhspan(50, 60, facecolor="#0f766e", alpha=0.22, zorder=0)
+        ax.axhspan(60, 65, facecolor="#b45309", alpha=0.22, zorder=0)
+        ax.axhspan(65, 100, facecolor="#b91c1c", alpha=0.22, zorder=0)
+        ax.axhline(target_rh, color="#111827", linewidth=1.5, alpha=0.9)
         ax.plot(df.index, df.iloc[:, 0], linewidth=2)
         ax.set_ylabel("RH %")
         ax.set_xlabel("")
