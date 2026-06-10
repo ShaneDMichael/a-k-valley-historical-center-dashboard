@@ -160,18 +160,6 @@ def _ensure_tables() -> None:
                 );
                 """
             )
-            try:
-                cur.execute(
-                    """
-                    create index if not exists weather_forecast_points_target_ts_idx
-                    on weather_forecast_points (target_ts);
-                    """
-                )
-            except Exception as e:
-                # Some Neon roles are not table owners and cannot create indexes; skip.
-                msg = str(e)
-                if "must be owner of table" not in msg and "permission denied" not in msg:
-                    raise
             cur.execute(
                 """
                 create table if not exists forecast_predictions (
@@ -187,6 +175,28 @@ def _ensure_tables() -> None:
                 );
                 """
             )
+
+        # Commit table creation before attempting optional index creation.
+        # If an index create fails (common with restricted Neon roles), we must rollback that
+        # statement; otherwise the connection remains in an aborted transaction state.
+        conn.commit()
+
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    """
+                    create index if not exists weather_forecast_points_target_ts_idx
+                    on weather_forecast_points (target_ts);
+                    """
+                )
+                conn.commit()
+            except Exception as e:
+                msg = str(e)
+                conn.rollback()
+                if "must be owner of table" not in msg and "permission denied" not in msg:
+                    raise
+
+        with conn.cursor() as cur:
             try:
                 cur.execute(
                     """
@@ -194,11 +204,12 @@ def _ensure_tables() -> None:
                     on forecast_predictions (horizon_hours, run_ts);
                     """
                 )
+                conn.commit()
             except Exception as e:
                 msg = str(e)
+                conn.rollback()
                 if "must be owner of table" not in msg and "permission denied" not in msg:
                     raise
-        conn.commit()
 
 
 @app.get("/optimizer/latest")
