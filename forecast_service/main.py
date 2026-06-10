@@ -831,12 +831,52 @@ def status() -> Dict[str, Any]:
     except Exception as e:
         warnings.append(f"db_insert_failed:{str(e)}")
 
+    # If SwitchBot did not return RH, fall back to the latest values already stored in Postgres.
+    if far_rh is None and near_rh is None:
+        try:
+            with _db_connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        with ranked as (
+                          select
+                            role,
+                            rh_percent,
+                            row_number() over (partition by role order by ts desc) as rn
+                          from sensor_readings
+                          where role in ('basement_far', 'basement_near')
+                            and ts <= %s
+                        )
+                        select role, rh_percent
+                        from ranked
+                        where rn = 1;
+                        """,
+                        (now_min,),
+                    )
+                    rows = cur.fetchall() or []
+            db_rh: Dict[str, Optional[float]] = {}
+            for role, rhp in rows:
+                try:
+                    db_rh[str(role)] = None if rhp is None else float(rhp)
+                except Exception:
+                    db_rh[str(role)] = None
+            if db_rh.get("basement_far") is not None or db_rh.get("basement_near") is not None:
+                warnings.append("switchbot_missing_rh_used_db_fallback")
+                if far_rh is None:
+                    far_rh = db_rh.get("basement_far")
+                if near_rh is None:
+                    near_rh = db_rh.get("basement_near")
+        except Exception as e:
+            warnings.append(f"current_rh_db_fallback_failed:{str(e)}")
+
     current_rh_max = None
     if far_rh is not None:
         if near_rh is None:
             current_rh_max = float(far_rh)
         else:
             current_rh_max = float(max(far_rh, near_rh))
+    elif near_rh is not None:
+        current_rh_max = float(near_rh)
 
     risk_days = None
     try:
