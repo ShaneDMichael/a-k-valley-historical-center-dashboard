@@ -160,12 +160,18 @@ def _ensure_tables() -> None:
                 );
                 """
             )
-            cur.execute(
-                """
-                create index if not exists weather_forecast_points_target_ts_idx
-                on weather_forecast_points (target_ts);
-                """
-            )
+            try:
+                cur.execute(
+                    """
+                    create index if not exists weather_forecast_points_target_ts_idx
+                    on weather_forecast_points (target_ts);
+                    """
+                )
+            except Exception as e:
+                # Some Neon roles are not table owners and cannot create indexes; skip.
+                msg = str(e)
+                if "must be owner of table" not in msg and "permission denied" not in msg:
+                    raise
             cur.execute(
                 """
                 create table if not exists forecast_predictions (
@@ -181,12 +187,17 @@ def _ensure_tables() -> None:
                 );
                 """
             )
-            cur.execute(
-                """
-                create index if not exists forecast_predictions_horizon_run_ts_idx
-                on forecast_predictions (horizon_hours, run_ts);
-                """
-            )
+            try:
+                cur.execute(
+                    """
+                    create index if not exists forecast_predictions_horizon_run_ts_idx
+                    on forecast_predictions (horizon_hours, run_ts);
+                    """
+                )
+            except Exception as e:
+                msg = str(e)
+                if "must be owner of table" not in msg and "permission denied" not in msg:
+                    raise
         conn.commit()
 
 
@@ -755,13 +766,8 @@ def status() -> Dict[str, Any]:
     try:
         _ensure_tables()
     except Exception as e:
-        return {
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "current": {"rh_max_percent": None, "risk_status": "unknown"},
-            "forecast_24h": {"rh_max_percent": None, "risk_status": "unknown"},
-            "forecast_48h": {"rh_max_percent": None, "risk_status": "unknown"},
-            "warnings": [f"db_error:{str(e)}"],
-        }
+        # Do not hard-fail status if we cannot run DDL (common for non-owner DB roles).
+        warnings.append(f"ensure_tables_failed:{str(e)}")
 
     now = datetime.now(timezone.utc)
     now_min = _round_to_minute(now)
