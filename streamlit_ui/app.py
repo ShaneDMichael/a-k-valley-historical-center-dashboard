@@ -38,8 +38,11 @@ def fetch_status() -> dict:
     return payload
 
 
-def fetch_optimizer_latest() -> dict:
-    resp = requests.get(FORECAST_OPTIMIZER_URL, timeout=20)
+def fetch_optimizer_latest(solver: str | None = None) -> dict:
+    params = None
+    if solver:
+        params = {"solver": str(solver)}
+    resp = requests.get(FORECAST_OPTIMIZER_URL, params=params, timeout=20)
     resp.raise_for_status()
     payload = resp.json()
     if not isinstance(payload, dict):
@@ -288,13 +291,29 @@ st.caption(f"Past number of Mold Risk days: {risk_days}")
 
 st.header("Dehumidifier Optimization (Daily Schedule)")
 
+solver_labels = {
+    "": "Latest (any)",
+    "heuristic_v1": "Heuristic (heuristic_v1)",
+    "milp_v1": "MILP (milp_v1)",
+}
+selected_solver_label = st.selectbox(
+    "Optimizer",
+    options=list(solver_labels.values()),
+    index=0,
+)
+selected_solver = ""
+for k, v in solver_labels.items():
+    if v == selected_solver_label:
+        selected_solver = k
+        break
+
 if _opt_view() != "optimizer":
     st.button("View optimization schedule", on_click=_go_opt)
 else:
     st.button("Back to main dashboard", on_click=_go_main)
 
 try:
-    opt = fetch_optimizer_latest()
+    opt = fetch_optimizer_latest(selected_solver or None)
 except Exception as e:
     st.error(f"Failed to load optimizer results: {e}")
     opt = {"run": None, "schedule_slots": [], "predicted_rh_points": []}
