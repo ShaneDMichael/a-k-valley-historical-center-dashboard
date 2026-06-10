@@ -421,22 +421,57 @@ def _fetch_history(start_ts: datetime, end_ts: datetime) -> pd.DataFrame:
     return df
 
 
+def _weather_forecast_points_colnames() -> Dict[str, str]:
+    """Return canonical column-name mapping for weather_forecast_points.
+
+    Neon schemas have evolved (e.g., run_ts vs run_ts_utc, target_ts vs target_ts_utc,
+    rh_percent vs rh_pct, dew_point_f vs dp_point_f). This helper makes read queries
+    robust to those variants.
+    """
+
+    with _db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select column_name
+                from information_schema.columns
+                where table_schema = current_schema()
+                  and table_name = 'weather_forecast_points';
+                """
+            )
+            cols = {r[0] for r in (cur.fetchall() or [])}
+
+    run_col = "run_ts_utc" if "run_ts_utc" in cols else "run_ts"
+    target_col = "target_ts_utc" if "target_ts_utc" in cols else "target_ts"
+    rh_col = "rh_pct" if "rh_pct" in cols else ("rh_percent" if "rh_percent" in cols else "rh")
+    dp_col = "dp_point_f" if "dp_point_f" in cols else "dew_point_f"
+    temp_col = "temp_f" if "temp_f" in cols else "temperature_f"
+    return {"run_ts": run_col, "target_ts": target_col, "rh": rh_col, "dew_point_f": dp_col, "temp_f": temp_col}
+
+
 def _fetch_open_meteo_feature_history(start_ts: datetime, end_ts: datetime) -> pd.DataFrame:
     start_ts = start_ts.replace(tzinfo=timezone.utc)
     end_ts = end_ts.replace(tzinfo=timezone.utc)
 
+    cols = _weather_forecast_points_colnames()
+    run_col = cols["run_ts"]
+    target_col = cols["target_ts"]
+    rh_col = cols["rh"]
+    dp_col = cols["dew_point_f"]
+    temp_col = cols["temp_f"]
+
     with _db_connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                """
+                f"""
                 with latest_run as (
                   select
-                    date_trunc('hour', run_ts) as run_hr,
-                    max(run_ts) as run_ts
+                    date_trunc('hour', {run_col}) as run_hr,
+                    max({run_col}) as run_ts
                   from weather_forecast_points
                   where source in ('open_meteo', 'open-meteo')
-                    and run_ts >= %s
-                    and run_ts <= %s
+                    and {run_col} >= %s
+                    and {run_col} <= %s
                   group by 1
                 )
                 select
@@ -449,23 +484,23 @@ def _fetch_open_meteo_feature_history(start_ts: datetime, end_ts: datetime) -> p
                   w48.dew_point_f as open_meteo_dew_point_f_t_plus_48h
                 from latest_run lr
                 left join lateral (
-                  select temp_f, rh_percent, dew_point_f
+                  select {temp_col} as temp_f, {rh_col} as rh_percent, {dp_col} as dew_point_f
                   from weather_forecast_points
-                  where run_ts = lr.run_ts
+                  where {run_col} = lr.run_ts
                     and source in ('open_meteo', 'open-meteo')
-                    and target_ts between (lr.run_hr + interval '24 hours' - interval '90 minutes')
-                                    and (lr.run_hr + interval '24 hours' + interval '90 minutes')
-                  order by abs(extract(epoch from (target_ts - (lr.run_hr + interval '24 hours'))))
+                    and {target_col} between (lr.run_hr + interval '24 hours' - interval '90 minutes')
+                                        and (lr.run_hr + interval '24 hours' + interval '90 minutes')
+                  order by abs(extract(epoch from ({target_col} - (lr.run_hr + interval '24 hours'))))
                   limit 1
                 ) w24 on true
                 left join lateral (
-                  select temp_f, rh_percent, dew_point_f
+                  select {temp_col} as temp_f, {rh_col} as rh_percent, {dp_col} as dew_point_f
                   from weather_forecast_points
-                  where run_ts = lr.run_ts
+                  where {run_col} = lr.run_ts
                     and source in ('open_meteo', 'open-meteo')
-                    and target_ts between (lr.run_hr + interval '48 hours' - interval '90 minutes')
-                                    and (lr.run_hr + interval '48 hours' + interval '90 minutes')
-                  order by abs(extract(epoch from (target_ts - (lr.run_hr + interval '48 hours'))))
+                    and {target_col} between (lr.run_hr + interval '48 hours' - interval '90 minutes')
+                                        and (lr.run_hr + interval '48 hours' + interval '90 minutes')
+                  order by abs(extract(epoch from ({target_col} - (lr.run_hr + interval '48 hours'))))
                   limit 1
                 ) w48 on true
                 order by lr.run_hr asc;
