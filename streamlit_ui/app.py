@@ -136,6 +136,11 @@ def fetch_open_meteo_rh_max(lat: str, lon: str, tz_name: str) -> tuple[float | N
     return (max24, max48)
 
 
+@st.cache_data(ttl=15 * 60)
+def fetch_open_meteo_rh_max_cached(lat: str, lon: str, tz_name: str) -> tuple[float | None, float | None]:
+    return fetch_open_meteo_rh_max(lat, lon, tz_name)
+
+
 def format_updated_at(value) -> str:
     if not value:
         return "—"
@@ -337,13 +342,17 @@ elif _opt_view() == "optimizer":
 
     if OPEN_METEO_LAT and OPEN_METEO_LON:
         try:
-            om24, om48 = fetch_open_meteo_rh_max(OPEN_METEO_LAT, OPEN_METEO_LON, OPEN_METEO_TZ)
+            om24, om48 = fetch_open_meteo_rh_max_cached(OPEN_METEO_LAT, OPEN_METEO_LON, OPEN_METEO_TZ)
             if om24 is None and om48 is None:
                 st.caption("Open-Meteo check: reachable, but no RH values returned.")
             else:
                 st.caption(f"Open-Meteo check: OK (max RH next 24h={om24}, next 48h={om48}).")
         except Exception as e:
-            st.caption(f"Open-Meteo check: failed ({e}).")
+            msg = str(e)
+            if "429" in msg or "Too Many Requests" in msg:
+                st.caption("Open-Meteo check: rate-limited (429). Waiting before retrying.")
+            else:
+                st.caption(f"Open-Meteo check: failed ({e}).")
 
     schedule_slots = opt.get("schedule_slots") or []
     rh_points = opt.get("predicted_rh_points") or []
@@ -402,8 +411,15 @@ elif _opt_view() == "optimizer":
             if not slots:
                 continue
 
-            # Sort + trim to 24 hours
-            slots = sorted(slots, key=lambda x: str(x.get("slot_start_ts") or ""))[:24]
+            # Sort by real timestamps (string sorting can mis-order) then trim to next 24 slots.
+            parsed_slots: List[tuple[datetime, dict]] = []
+            for s in slots:
+                s_start_dt = _parse_dt(s.get("slot_start_ts"))
+                if not s_start_dt:
+                    continue
+                parsed_slots.append((s_start_dt, s))
+            parsed_slots.sort(key=lambda t: t[0])
+            slots = [s for _, s in parsed_slots][:24]
 
             periods: List[tuple[datetime, datetime, bool]] = []
             for s in slots:
