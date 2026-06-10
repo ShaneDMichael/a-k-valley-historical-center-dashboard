@@ -399,7 +399,7 @@ elif _opt_view() == "optimizer":
             return dt
 
         def _fmt_hm(dt: datetime) -> str:
-            s = dt.strftime("%b %d %I:%M%p")
+            s = dt.strftime("%b %d, %I:%M%p")
             s = s.replace(":00", "")
             if s.startswith("0"):
                 s = s[1:]
@@ -525,7 +525,7 @@ elif _opt_view() == "optimizer":
         ax.axhline(target_rh, color="#111827", linewidth=1.0, alpha=0.45)
         try:
             ax.text(
-                -0.02,
+                -0.005,
                 float(target_rh),
                 f"{int(round(target_rh))}",
                 transform=ax.get_yaxis_transform(),
