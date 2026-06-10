@@ -344,6 +344,11 @@ elif _opt_view() == "optimizer":
     }
     channels = list(channel_labels.keys())
 
+    try:
+        tz = ZoneInfo(OPEN_METEO_TZ)
+    except Exception:
+        tz = ZoneInfo("America/New_York")
+
     # Build a compact schedule grid: rows=channel, cols=hour start.
     slots_by_channel = {c: [] for c in channels}
     for s in schedule_slots:
@@ -421,11 +426,6 @@ elif _opt_view() == "optimizer":
 
     st.subheader("Predicted RH (when schedule is followed)")
     st.caption("These curves are the optimizer’s predicted RH trajectory assuming the ON/OFF schedule is followed.")
-
-    try:
-        tz = ZoneInfo(OPEN_METEO_TZ)
-    except Exception:
-        tz = ZoneInfo("America/New_York")
 
     pts_by_series = {c: [] for c in channels}
     for p in rh_points:
