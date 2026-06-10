@@ -336,6 +336,10 @@ elif _opt_view() == "optimizer":
         "Latest optimizer run: "
         f"{format_updated_at(run.get('run_ts'))} | solver={run.get('solver')}"
     )
+    if run.get("created_at"):
+        st.caption(f"Optimizer record created: {format_updated_at(run.get('created_at'))}")
+    if run.get("app_version"):
+        st.caption(f"Optimizer app_version: {run.get('app_version')}")
     if run.get("warnings"):
         st.caption(f"Warnings: {run.get('warnings')}")
 
