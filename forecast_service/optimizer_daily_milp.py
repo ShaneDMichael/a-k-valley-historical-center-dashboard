@@ -166,6 +166,18 @@ def _ensure_optimizer_tables() -> None:
                 );
                 """
             )
+            cur.execute(
+                """
+                create table if not exists predicted_rh_points (
+                  run_id uuid not null references optimizer_runs(run_id) on delete cascade,
+                  series text not null,
+                  ts timestamptz not null,
+                  rh_percent double precision not null,
+                  created_at timestamptz not null default now(),
+                  primary key (run_id, series, ts)
+                );
+                """
+            )
         conn.commit()
 
 
@@ -177,6 +189,7 @@ def _write_optimizer_outputs(
     solver: str,
     warnings: str,
     schedule_rows: List[Tuple[str, datetime, datetime, bool]],
+    predicted_rh_rows: List[Tuple[str, datetime, float]],
 ) -> str:
     run_id = uuid.uuid4()
     run_id_s = str(run_id)
@@ -207,6 +220,17 @@ def _write_optimizer_outputs(
                 """,
                 [(run_id_s, cid, s, e, bool(on)) for (cid, s, e, on) in schedule_rows],
             )
+
+            if predicted_rh_rows:
+                psycopg2.extras.execute_values(
+                    cur,
+                    """
+                    insert into predicted_rh_points (run_id, series, ts, rh_percent)
+                    values %s
+                    on conflict do nothing;
+                    """,
+                    [(run_id_s, str(series), ts, float(rh)) for (series, ts, rh) in predicted_rh_rows],
+                )
         conn.commit()
 
     return run_id_s
@@ -285,15 +309,15 @@ def solve_milp_schedule(
     start_ts: datetime,
     horizon_slots: int,
     slot_hours: float,
-) -> Tuple[List[Tuple[str, datetime, datetime, bool]], List[str]]:
+) -> Tuple[List[Tuple[str, datetime, datetime, bool]], List[Tuple[str, datetime, float]], List[str]]:
     try:
         from ortools.linear_solver import pywraplp
     except Exception as e:
-        return [], [f"missing_dependency_ortools:{type(e).__name__}"]
+        return [], [], [f"missing_dependency_ortools:{type(e).__name__}"]
 
     solver = pywraplp.Solver.CreateSolver("CBC")
     if solver is None:
-        return [], ["milp_solver_unavailable"]
+        return [], [], ["milp_solver_unavailable"]
 
     u: Dict[Tuple[str, int], Any] = {}
     rh: Dict[Tuple[str, int], Any] = {}
@@ -326,7 +350,7 @@ def solve_milp_schedule(
             solver.Add(rh[(ch.channel_id, t)] - RH_THRESHOLD <= exc[(ch.channel_id, t)])
             solver.Add(exc[(ch.channel_id, t)] >= 0.0)
 
-            solver.Add(rh[(ch.channel_id, t)] >= RH_TARGET - big_m * u[(ch.channel_id, t)])
+            solver.Add(rh[(ch.channel_id, t)] >= RH_TARGET - big_m + big_m * u[(ch.channel_id, t)])
 
     obj_terms = []
     for ch in channels:
@@ -338,7 +362,7 @@ def solve_milp_schedule(
 
     status = solver.Solve()
     if status not in (pywraplp.Solver.OPTIMAL, pywraplp.Solver.FEASIBLE):
-        return [], [f"milp_infeasible_or_failed:status={status}"]
+        return [], [], [f"milp_infeasible_or_failed:status={status}"]
 
     schedule_rows: List[Tuple[str, datetime, datetime, bool]] = []
     for ch in channels:
@@ -348,7 +372,13 @@ def solve_milp_schedule(
             on = bool(round(u[(ch.channel_id, t)].solution_value()))
             schedule_rows.append((ch.channel_id, slot_start, slot_end, on))
 
-    return schedule_rows, []
+    predicted_rh_rows: List[Tuple[str, datetime, float]] = []
+    for ch in channels:
+        for t in range(horizon_slots + 1):
+            ts = start_ts + timedelta(hours=float(t) * float(slot_hours))
+            predicted_rh_rows.append((ch.channel_id, ts, float(rh[(ch.channel_id, t)].solution_value())))
+
+    return schedule_rows, predicted_rh_rows, []
 
 
 def main() -> None:
@@ -375,7 +405,7 @@ def main() -> None:
 
     start = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
-    schedule_rows, w2 = solve_milp_schedule(
+    schedule_rows, predicted_rh_rows, w2 = solve_milp_schedule(
         channels=channels,
         start_ts=start,
         horizon_slots=horizon_slots,
@@ -393,6 +423,7 @@ def main() -> None:
         solver="milp_v1",
         warnings=";".join(warnings),
         schedule_rows=schedule_rows,
+        predicted_rh_rows=predicted_rh_rows,
     )
 
     elapsed = time.perf_counter() - t0
