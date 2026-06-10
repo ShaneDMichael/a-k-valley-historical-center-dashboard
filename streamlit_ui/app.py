@@ -399,10 +399,11 @@ elif _opt_view() == "optimizer":
             return dt
 
         def _fmt_hm(dt: datetime) -> str:
-            s = dt.strftime("%I:%M%p").lower()
+            s = dt.strftime("%b %d %I:%M%p")
             s = s.replace(":00", "")
             if s.startswith("0"):
                 s = s[1:]
+            s = s.replace("AM", "am").replace("PM", "pm")
             return s
 
         for c in channels:
@@ -426,6 +427,8 @@ elif _opt_view() == "optimizer":
                 s_end = _parse_dt(s.get("slot_end_ts"))
                 if not s_start or not s_end:
                     continue
+                if s_end <= s_start:
+                    continue
                 s_on = bool(s.get("is_on"))
 
                 # Convert to local tz for display
@@ -448,6 +451,8 @@ elif _opt_view() == "optimizer":
                 continue
 
             for p_start, p_end, p_on in periods:
+                if p_end <= p_start:
+                    continue
                 st.caption(f"{_fmt_hm(p_start)} – {_fmt_hm(p_end)}: {'ON' if p_on else 'OFF'}")
     else:
         st.info("No schedule slots available yet.")
@@ -519,16 +524,16 @@ elif _opt_view() == "optimizer":
         ax.axhspan(65, 100, facecolor="#b91c1c", alpha=0.28, zorder=0)
         ax.axhline(target_rh, color="#111827", linewidth=1.0, alpha=0.45)
         try:
-            ax.annotate(
+            ax.text(
+                -0.02,
+                float(target_rh),
                 f"{int(round(target_rh))}",
-                xy=(df.index.max(), target_rh),
-                xytext=(6, 0),
-                textcoords="offset points",
+                transform=ax.get_yaxis_transform(),
                 va="center",
-                ha="left",
-                fontsize=9,
+                ha="right",
+                fontsize=8,
                 color="#111827",
-                alpha=0.65,
+                alpha=0.60,
             )
         except Exception:
             pass
