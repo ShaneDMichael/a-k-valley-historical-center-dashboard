@@ -460,6 +460,10 @@ elif _opt_view() == "optimizer":
 
         df = pd.DataFrame({channel_labels.get(c, c): values}, index=pd.DatetimeIndex(times))
         fig, ax = plt.subplots(figsize=(10, 2.5))
+        ax.axhspan(0, 50, facecolor="#15803d", alpha=0.10, zorder=0)
+        ax.axhspan(50, 60, facecolor="#0f766e", alpha=0.10, zorder=0)
+        ax.axhspan(60, 65, facecolor="#b45309", alpha=0.10, zorder=0)
+        ax.axhspan(65, 100, facecolor="#b91c1c", alpha=0.10, zorder=0)
         ax.plot(df.index, df.iloc[:, 0], linewidth=2)
         ax.set_ylabel("RH %")
         ax.set_xlabel("")
