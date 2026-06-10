@@ -215,18 +215,30 @@ def _ensure_tables() -> None:
 
 
 @app.get("/optimizer/latest")
-def optimizer_latest() -> Dict[str, Any]:
+def optimizer_latest(solver: Optional[str] = None) -> Dict[str, Any]:
     try:
         with _db_connect() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute(
-                    """
-                    select run_id, run_ts, horizon_hours, solver, rh_target_percent, app_version, warnings, created_at
-                    from optimizer_runs
-                    order by run_ts desc, created_at desc
-                    limit 1;
-                    """
-                )
+                if solver:
+                    cur.execute(
+                        """
+                        select run_id, run_ts, horizon_hours, solver, rh_target_percent, app_version, warnings, created_at
+                        from optimizer_runs
+                        where solver = %s
+                        order by run_ts desc, created_at desc
+                        limit 1;
+                        """,
+                        (solver,),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        select run_id, run_ts, horizon_hours, solver, rh_target_percent, app_version, warnings, created_at
+                        from optimizer_runs
+                        order by run_ts desc, created_at desc
+                        limit 1;
+                        """
+                    )
                 run = cur.fetchone()
 
                 if not run:
