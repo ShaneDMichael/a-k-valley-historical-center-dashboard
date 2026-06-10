@@ -465,7 +465,18 @@ elif _opt_view() == "optimizer":
         if not times:
             continue
 
-        df = pd.DataFrame({channel_labels.get(c, c): values}, index=pd.DatetimeIndex(times)).sort_index()
+        idx = pd.to_datetime(times)
+        try:
+            if getattr(idx, "tz", None) is not None:
+                idx = idx.tz_convert(tz)
+        except Exception:
+            pass
+        try:
+            idx = idx.tz_localize(None)
+        except Exception:
+            pass
+
+        df = pd.DataFrame({channel_labels.get(c, c): values}, index=pd.DatetimeIndex(idx)).sort_index()
         fig, ax = plt.subplots(figsize=(10, 2.5))
         ax.axhspan(0, 50, facecolor="#15803d", alpha=0.10, zorder=0)
         ax.axhspan(50, 60, facecolor="#0f766e", alpha=0.10, zorder=0)
@@ -475,6 +486,10 @@ elif _opt_view() == "optimizer":
         ax.set_ylabel("RH %")
         ax.set_xlabel("")
         ax.set_ylim(0, 100)
+        try:
+            ax.set_xlim(df.index.min(), df.index.max())
+        except Exception:
+            pass
         ax.grid(True, alpha=0.25)
         fig.autofmt_xdate(rotation=0, ha="center")
         st.pyplot(fig, clear_figure=True)
