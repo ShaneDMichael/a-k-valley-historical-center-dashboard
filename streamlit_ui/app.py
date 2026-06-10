@@ -524,11 +524,12 @@ elif _opt_view() == "optimizer":
         ax.axhspan(65, 100, facecolor="#b91c1c", alpha=0.28, zorder=0)
         ax.axhline(target_rh, color="#111827", linewidth=1.0, alpha=0.45)
         try:
-            ax.text(
-                -0.005,
-                float(target_rh),
+            ax.annotate(
                 f"{int(round(target_rh))}",
-                transform=ax.get_yaxis_transform(),
+                xy=(-0.005, float(target_rh)),
+                xycoords=ax.get_yaxis_transform(),
+                xytext=(0, -6),
+                textcoords="offset points",
                 va="center",
                 ha="right",
                 fontsize=8,
