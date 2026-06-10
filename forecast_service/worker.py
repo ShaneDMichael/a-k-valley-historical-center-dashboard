@@ -1,4 +1,5 @@
 import os
+import random
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -26,7 +27,7 @@ from main import (
 
 
 POLL_SECONDS = int(os.getenv("WORKER_POLL_SECONDS", "60"))
-WEATHER_POLL_SECONDS = int(os.getenv("WEATHER_POLL_SECONDS", "900"))
+WEATHER_POLL_SECONDS = int(os.getenv("WEATHER_POLL_SECONDS", "3600"))
 WEATHER_BACKOFF_429_SECONDS = int(os.getenv("WEATHER_BACKOFF_429_SECONDS", "3600"))
 OPEN_METEO_LAT = float(os.getenv("OPEN_METEO_LAT", "40.602722"))
 OPEN_METEO_LON = float(os.getenv("OPEN_METEO_LON", "-79.75420"))
@@ -298,7 +299,7 @@ def main() -> None:
         f"weather_backoff_429_seconds={WEATHER_BACKOFF_429_SECONDS}"
     )
 
-    next_weather = time.time()
+    next_weather = time.time() + float(random.randint(0, 60))
 
     while True:
         try:

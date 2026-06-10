@@ -136,7 +136,7 @@ def fetch_open_meteo_rh_max(lat: str, lon: str, tz_name: str) -> tuple[float | N
     return (max24, max48)
 
 
-@st.cache_data(ttl=15 * 60)
+@st.cache_data(ttl=2 * 60 * 60)
 def fetch_open_meteo_rh_max_cached(lat: str, lon: str, tz_name: str) -> tuple[float | None, float | None]:
     return fetch_open_meteo_rh_max(lat, lon, tz_name)
 
