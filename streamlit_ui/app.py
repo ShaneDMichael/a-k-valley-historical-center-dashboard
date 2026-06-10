@@ -433,13 +433,16 @@ elif _opt_view() == "optimizer":
                 continue
 
             for p_start, p_end, p_on in periods:
-                st.write(f"{_fmt_hm(p_start)} – {_fmt_hm(p_end)}: {'ON' if p_on else 'OFF'}")
+                st.caption(f"{_fmt_hm(p_start)} – {_fmt_hm(p_end)}: {'ON' if p_on else 'OFF'}")
     else:
         st.info("No schedule slots available yet.")
 
     st.subheader("Predicted RH (when schedule is followed)")
     st.caption("These curves are the optimizer’s predicted RH trajectory assuming the ON/OFF schedule is followed.")
-    st.caption("Background colors show qualitative mold risk bands by RH: 0–50 none, 50–60 low, 60–65 medium, 65+ high.")
+    st.caption(
+        "Background colors show qualitative mold risk bands by RH: "
+        "0–50 none (green), 50–60 low (teal), 60–65 medium (orange), 65+ high (red)."
+    )
 
     pts_by_series = {c: [] for c in channels}
     for p in rh_points:
@@ -513,7 +516,8 @@ elif _opt_view() == "optimizer":
             try:
                 dt = mdates.num2date(x)
                 s = dt.strftime("%b %d %I%p")
-                s = s.replace(" 0", " ").lower()
+                s = s.replace(" 0", " ")
+                s = s.replace("AM", "am").replace("PM", "pm")
                 return s
             except Exception:
                 return ""
