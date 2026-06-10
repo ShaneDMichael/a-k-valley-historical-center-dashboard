@@ -334,8 +334,7 @@ if not run:
 elif _opt_view() == "optimizer":
     st.caption(
         "Latest optimizer run: "
-        f"{format_updated_at(run.get('run_ts'))} | solver={run.get('solver')} | "
-        f"target_rh={run.get('rh_target_percent')}"
+        f"{format_updated_at(run.get('run_ts'))} | solver={run.get('solver')}"
     )
     if run.get("warnings"):
         st.caption(f"Warnings: {run.get('warnings')}")
@@ -519,6 +518,20 @@ elif _opt_view() == "optimizer":
         ax.axhspan(60, 65, facecolor="#b45309", alpha=0.28, zorder=0)
         ax.axhspan(65, 100, facecolor="#b91c1c", alpha=0.28, zorder=0)
         ax.axhline(target_rh, color="#111827", linewidth=1.0, alpha=0.45)
+        try:
+            ax.annotate(
+                f"{int(round(target_rh))}",
+                xy=(df.index.max(), target_rh),
+                xytext=(6, 0),
+                textcoords="offset points",
+                va="center",
+                ha="left",
+                fontsize=9,
+                color="#111827",
+                alpha=0.65,
+            )
+        except Exception:
+            pass
         ax.plot(df.index, df.iloc[:, 0], linewidth=2)
         ax.set_ylabel("RH %")
         ax.set_xlabel("")
