@@ -359,18 +359,63 @@ elif _opt_view() == "optimizer":
             break
 
     if col_ts:
-        st.subheader("Schedule (next 24 hours)")
-        header_cols = st.columns([2] + [1] * min(24, len(col_ts)))
-        header_cols[0].markdown("**Channel**")
-        for i, t in enumerate(col_ts[:24]):
-            header_cols[i + 1].markdown(f"**{format_updated_at(t).split()[-3]}**")
+        st.subheader("Schedule periods (next 24 hours)")
+
+        def _parse_dt(v: str | None) -> Optional[datetime]:
+            if not v:
+                return None
+            try:
+                dt = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+            except Exception:
+                return None
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+
+        def _fmt_hm(dt: datetime) -> str:
+            s = dt.strftime("%I:%M%p").lower()
+            s = s.replace(":00", "")
+            if s.startswith("0"):
+                s = s[1:]
+            return s
 
         for c in channels:
-            row_cols = st.columns([2] + [1] * min(24, len(col_ts)))
-            row_cols[0].write(channel_labels.get(c, c))
             slots = slots_by_channel.get(c) or []
-            for i, s in enumerate(slots[:24]):
-                row_cols[i + 1].write("ON" if s.get("is_on") else "OFF")
+            if not slots:
+                continue
+
+            # Sort + trim to 24 hours
+            slots = sorted(slots, key=lambda x: str(x.get("slot_start_ts") or ""))[:24]
+
+            periods: List[tuple[datetime, datetime, bool]] = []
+            for s in slots:
+                s_start = _parse_dt(s.get("slot_start_ts"))
+                s_end = _parse_dt(s.get("slot_end_ts"))
+                if not s_start or not s_end:
+                    continue
+                s_on = bool(s.get("is_on"))
+
+                # Convert to local tz for display
+                s_start = s_start.astimezone(tz)
+                s_end = s_end.astimezone(tz)
+
+                if not periods:
+                    periods.append((s_start, s_end, s_on))
+                    continue
+
+                last_start, last_end, last_on = periods[-1]
+                if s_on == last_on and abs((s_start - last_end).total_seconds()) <= 1:
+                    periods[-1] = (last_start, s_end, last_on)
+                else:
+                    periods.append((s_start, s_end, s_on))
+
+            st.markdown(f"**{channel_labels.get(c, c)}**")
+            if not periods:
+                st.caption("No schedule periods available.")
+                continue
+
+            for p_start, p_end, p_on in periods:
+                st.write(f"{_fmt_hm(p_start)} – {_fmt_hm(p_end)}: {'ON' if p_on else 'OFF'}")
     else:
         st.info("No schedule slots available yet.")
 
