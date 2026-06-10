@@ -91,7 +91,7 @@ def _insert_weather_forecast(ts_utc: datetime, temp_f: Optional[float], rh: Opti
                   rh_percent = excluded.rh_percent,
                   dew_point_f = excluded.dew_point_f;
                 """,
-                (ts_utc, "open_meteo", temp_f, rh, dew_point_f),
+                (ts_utc, "open-meteo", temp_f, rh, dew_point_f),
             )
         conn.commit()
 
@@ -99,20 +99,27 @@ def _insert_weather_forecast(ts_utc: datetime, temp_f: Optional[float], rh: Opti
 def _insert_weather_forecast_point(
     *, run_ts_utc: datetime, target_ts_utc: datetime, temp_f: Optional[float], rh: Optional[float], dew_point_f: Optional[float]
 ) -> None:
-    from main import _db_connect
+    from main import _db_connect, _weather_forecast_points_colnames
+
+    cols = _weather_forecast_points_colnames()
+    run_col = cols["run_ts"]
+    target_col = cols["target_ts"]
+    rh_col = cols["rh"]
+    dp_col = cols["dew_point_f"]
+    temp_col = cols["temp_f"]
 
     with _db_connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """
-                insert into weather_forecast_points (run_ts, target_ts, source, temp_f, rh_percent, dew_point_f)
+                f"""
+                insert into weather_forecast_points ({run_col}, {target_col}, source, {temp_col}, {rh_col}, {dp_col})
                 values (%s, %s, %s, %s, %s, %s)
-                on conflict (run_ts, target_ts, source) do update set
-                  temp_f = excluded.temp_f,
-                  rh_percent = excluded.rh_percent,
-                  dew_point_f = excluded.dew_point_f;
+                on conflict ({run_col}, {target_col}, source) do update set
+                  {temp_col} = excluded.{temp_col},
+                  {rh_col} = excluded.{rh_col},
+                  {dp_col} = excluded.{dp_col};
                 """,
-                (run_ts_utc, target_ts_utc, "open_meteo", temp_f, rh, dew_point_f),
+                (run_ts_utc, target_ts_utc, "open-meteo", temp_f, rh, dew_point_f),
             )
         conn.commit()
 
@@ -144,7 +151,14 @@ def _refresh_open_meteo_hourly() -> Dict[str, Any]:
     tz = ZoneInfo(str(OPEN_METEO_TZ or "UTC"))
     inserted = 0
     inserted_points = 0
-    from main import _db_connect
+    from main import _db_connect, _weather_forecast_points_colnames
+
+    cols = _weather_forecast_points_colnames()
+    run_col = cols["run_ts"]
+    target_col = cols["target_ts"]
+    rh_col = cols["rh"]
+    dp_col = cols["dew_point_f"]
+    temp_col = cols["temp_f"]
 
     with _db_connect() as conn:
         with conn.cursor() as cur:
@@ -169,20 +183,20 @@ def _refresh_open_meteo_hourly() -> Dict[str, Any]:
                       rh_percent = excluded.rh_percent,
                       dew_point_f = excluded.dew_point_f;
                     """,
-                    (ts_utc, "open_meteo", temp_f, rh, dp_f),
+                    (ts_utc, "open-meteo", temp_f, rh, dp_f),
                 )
                 inserted += 1
 
                 cur.execute(
-                    """
-                    insert into weather_forecast_points (run_ts, target_ts, source, temp_f, rh_percent, dew_point_f)
+                    f"""
+                    insert into weather_forecast_points ({run_col}, {target_col}, source, {temp_col}, {rh_col}, {dp_col})
                     values (%s, %s, %s, %s, %s, %s)
-                    on conflict (run_ts, target_ts, source) do update set
-                      temp_f = excluded.temp_f,
-                      rh_percent = excluded.rh_percent,
-                      dew_point_f = excluded.dew_point_f;
+                    on conflict ({run_col}, {target_col}, source) do update set
+                      {temp_col} = excluded.{temp_col},
+                      {rh_col} = excluded.{rh_col},
+                      {dp_col} = excluded.{dp_col};
                     """,
-                    (run_ts_utc, ts_utc, "open_meteo", temp_f, rh, dp_f),
+                    (run_ts_utc, ts_utc, "open-meteo", temp_f, rh, dp_f),
                 )
                 inserted_points += 1
         conn.commit()

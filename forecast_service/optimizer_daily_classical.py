@@ -191,11 +191,11 @@ def _weather_forecast_points_colnames() -> Dict[str, str]:
             )
             cols = {str(r[0]) for r in (cur.fetchall() or [])}
 
-    run_col = "run_ts" if "run_ts" in cols else "run_ts_utc"
-    target_col = "target_ts" if "target_ts" in cols else "target_ts_utc"
-    rh_col = "rh_percent" if "rh_percent" in cols else "rh_pct"
-    dp_col = "dew_point_f" if "dew_point_f" in cols else "dew_point_f"
-    temp_col = "temp_f" if "temp_f" in cols else "temp_f"
+    run_col = "run_ts_utc" if "run_ts_utc" in cols else "run_ts"
+    target_col = "target_ts_utc" if "target_ts_utc" in cols else "target_ts"
+    rh_col = "rh_pct" if "rh_pct" in cols else ("rh_percent" if "rh_percent" in cols else "rh")
+    dp_col = "dp_point_f" if "dp_point_f" in cols else "dew_point_f"
+    temp_col = "temp_f" if "temp_f" in cols else "temperature_f"
 
     return {
         "run_ts": run_col,
