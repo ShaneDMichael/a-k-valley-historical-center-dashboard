@@ -427,6 +427,7 @@ elif _opt_view() == "optimizer":
 
     st.subheader("Predicted RH (when schedule is followed)")
     st.caption("These curves are the optimizer’s predicted RH trajectory assuming the ON/OFF schedule is followed.")
+    st.caption("Background colors show qualitative mold risk bands by RH: 0–50 none, 50–60 low, 60–65 medium, 65+ high.")
 
     pts_by_series = {c: [] for c in channels}
     for p in rh_points:
@@ -442,6 +443,9 @@ elif _opt_view() == "optimizer":
         st.markdown(f"**{channel_labels.get(c, c)}**")
         times: List[datetime] = []
         values: List[Optional[float]] = []
+        now_local = datetime.now(tz)
+        min_ts = now_local - timedelta(days=2)
+        max_ts = now_local + timedelta(days=7)
         for item in pts:
             ts_raw = item.get("ts")
             if not ts_raw:
@@ -452,13 +456,16 @@ elif _opt_view() == "optimizer":
                 continue
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
-            times.append(dt.astimezone(tz))
+            dt_local = dt.astimezone(tz)
+            if dt_local < min_ts or dt_local > max_ts:
+                continue
+            times.append(dt_local)
             values.append(item.get("rh_percent"))
 
         if not times:
             continue
 
-        df = pd.DataFrame({channel_labels.get(c, c): values}, index=pd.DatetimeIndex(times))
+        df = pd.DataFrame({channel_labels.get(c, c): values}, index=pd.DatetimeIndex(times)).sort_index()
         fig, ax = plt.subplots(figsize=(10, 2.5))
         ax.axhspan(0, 50, facecolor="#15803d", alpha=0.10, zorder=0)
         ax.axhspan(50, 60, facecolor="#0f766e", alpha=0.10, zorder=0)
