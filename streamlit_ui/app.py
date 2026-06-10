@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import requests
 import streamlit as st
@@ -458,7 +459,14 @@ elif _opt_view() == "optimizer":
             continue
 
         df = pd.DataFrame({channel_labels.get(c, c): values}, index=pd.DatetimeIndex(times))
-        st.line_chart(df)
+        fig, ax = plt.subplots(figsize=(10, 2.5))
+        ax.plot(df.index, df.iloc[:, 0], linewidth=2)
+        ax.set_ylabel("RH %")
+        ax.set_xlabel("")
+        ax.set_ylim(0, 100)
+        ax.grid(True, alpha=0.25)
+        fig.autofmt_xdate(rotation=0, ha="center")
+        st.pyplot(fig, clear_figure=True)
 
 
 if REFRESH_SECONDS > 0:
