@@ -526,13 +526,13 @@ elif _opt_view() == "optimizer":
         try:
             ax.annotate(
                 f"{int(round(target_rh))}",
-                xy=(0.0, float(target_rh)),
+                xy=(-0.002, float(target_rh)),
                 xycoords=ax.get_yaxis_transform(),
-                xytext=(3, -10),
+                xytext=(-2, -6),
                 textcoords="offset points",
                 va="center",
-                ha="left",
-                fontsize=8,
+                ha="right",
+                fontsize=7,
                 color="#111827",
                 alpha=0.60,
             )
