@@ -246,35 +246,6 @@ if f48_rh is None:
     except Exception:
         f48_rh = None
 
-if (f24_rh is None or f48_rh is None) and OPEN_METEO_LAT and OPEN_METEO_LON:
-    try:
-        om24, om48 = fetch_open_meteo_rh_max(OPEN_METEO_LAT, OPEN_METEO_LON, OPEN_METEO_TZ)
-        try:
-            current_rh_f = float(current_rh) if current_rh is not None else None
-        except Exception:
-            current_rh_f = None
-
-        # Open-Meteo is OUTDOOR RH; use it only as a weak signal so we don't
-        # show unrealistic basement jumps while the database is still populating.
-        def _blend(outdoor_max: float | None) -> float | None:
-            if outdoor_max is None:
-                return None
-            if current_rh_f is None:
-                return float(outdoor_max)
-            v = 0.9 * float(current_rh_f) + 0.1 * float(outdoor_max)
-            # Clamp tightly around current conditions.
-            v = max(float(current_rh_f) - 5.0, min(float(current_rh_f) + 5.0, v))
-            return float(max(0.0, min(100.0, v)))
-
-        if f24_rh is None and om24 is not None:
-            f24_rh = _blend(om24)
-            f24_is_estimate = True
-        if f48_rh is None and om48 is not None:
-            f48_rh = _blend(om48)
-            f48_is_estimate = True
-    except Exception:
-        pass
-
 f24_risk = f24.get("risk_status")
 f48_risk = f48.get("risk_status")
 if not f24_risk or str(f24_risk).lower() == "unknown":
@@ -343,19 +314,13 @@ elif _opt_view() == "optimizer":
     if run.get("warnings"):
         st.caption(f"Warnings: {run.get('warnings')}")
 
-    if OPEN_METEO_LAT and OPEN_METEO_LON:
-        try:
-            om24, om48 = fetch_open_meteo_rh_max_cached(OPEN_METEO_LAT, OPEN_METEO_LON, OPEN_METEO_TZ)
-            if om24 is None and om48 is None:
-                st.caption("Open-Meteo check: reachable, but no RH values returned.")
-            else:
-                st.caption(f"Open-Meteo check: OK (max RH next 24h={om24}, next 48h={om48}).")
-        except Exception as e:
-            msg = str(e)
-            if "429" in msg or "Too Many Requests" in msg:
-                st.caption("Open-Meteo check: rate-limited (429). Waiting before retrying.")
-            else:
-                st.caption(f"Open-Meteo check: failed ({e}).")
+    om_db = status.get("open_meteo_db") or {}
+    if om_db:
+        st.caption(
+            "Open-Meteo DB: "
+            f"points_last_48h={om_db.get('points_last_48h')} "
+            f"latest_run={format_updated_at(om_db.get('latest_run_ts_utc'))}"
+        )
 
     schedule_slots = opt.get("schedule_slots") or []
     rh_points = opt.get("predicted_rh_points") or []
