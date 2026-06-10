@@ -528,7 +528,7 @@ elif _opt_view() == "optimizer":
                 f"{int(round(target_rh))}",
                 xy=(-0.002, float(target_rh)),
                 xycoords=ax.get_yaxis_transform(),
-                xytext=(-2, -6),
+                xytext=(-2, -3),
                 textcoords="offset points",
                 va="center",
                 ha="right",
